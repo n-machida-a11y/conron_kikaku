@@ -138,8 +138,7 @@ function getProductData() {
     const colorSheet = ss.getSheetByName("カラー");
     const sizeSheet = ss.getSheetByName("サイズ");
     const photoSheet = ss.getSheetByName("絵型");
-    // const fabricSheet は不要
-
+    
     // 必須シートの存在チェック
     if (!kikakuSheet) {
       throw new Error("スプレッドシート内に「企画管理」シートが見つかりませんでした。");
@@ -147,13 +146,12 @@ function getProductData() {
     
     // データ最終行の取得
     const kikakuLastRow = kikakuSheet.getLastRow();
-    // 必須ではないシートは、存在しない場合は空の配列で代用できるように調整
     const colorLastRow = colorSheet ? colorSheet.getLastRow() : 1;
     const sizeLastRow = sizeSheet ? sizeSheet.getLastRow() : 1;
     const photoLastRow = photoSheet ? photoSheet.getLastRow() : 1;
 
-    // 企画管理の列数を15列に更新
-    const KIKAKU_MAX_COL = 15; 
+    // 企画管理の列数を16列(以上)に拡張して取得
+    const KIKAKU_MAX_COL = 16; 
     const kikakuValues = (kikakuLastRow > 1) ? kikakuSheet.getRange(2, 1, kikakuLastRow - 1, KIKAKU_MAX_COL).getValues() : [];
     
     // データ取得（シートが存在しない場合は空の配列を返す）
@@ -165,8 +163,8 @@ function getProductData() {
     const imageBase64Map = getImageUrlMap();
 
     // 新しい企画管理の列定義に基づくマッピング (0-indexed)
-    // [管理ID(0), 仮品番(1), 定番/外注(2), 品番(3), 品名(4), シーズン(5), ブランド(6), カテゴリー(7), サイズ(8),
-    // 上代(9), 下代(10), 生地番号(11), 生地名(12), 進捗(13), 仕様書担当者(14)]
+    // 列追加に対応: composition(混率)やinseam(股下)を想定
+    // 現状はプレースホルダーとしてマッピング
     const KIKAKU_MAP = {
       kanriId: 0,       // 管理ID
       kariHinban: 1,    // 仮品番 (インデックス 1)
@@ -178,7 +176,10 @@ function getProductData() {
       jodai: 9,         // 上代 (9)
       gedai: 10,        // 下代 (10)
       fabric_number: 11, // 生地番号 (11)
-      material_name: 12  // 生地名 (12)
+      material_name: 12,  // 生地名 (12)
+      // ★新規追加項目の仮定 (もし列があればここを修正してください)
+      // composition: 14, 
+      // inseam: 15
     };
     
     // [カラー番号, 管理ID, カラー名]
@@ -187,7 +188,7 @@ function getProductData() {
       colorName: 2      // カラー名 (C列)
     }; 
     
-    // [管理ID, サイズ名] (変更なしと仮定)
+    // [管理ID, サイズ名]
     const SIZE_MAP = { kanriId: 0, size: 1 }; 
 
     // [絵型ID, 管理ID, タイトル, 写真(Path)]
@@ -196,8 +197,6 @@ function getProductData() {
       shashinId: 0      // 絵型ID (A列, 画像ファイルIDのキーとして使用)
     };
     
-    // FABRIC_MAPは不要
-
     // --- マップ作成 (カラー) ---
     const colorsMap = colorValues.reduce((acc, row) => {
       const id = row[COLOR_MAP.kanriId];
@@ -208,7 +207,7 @@ function getProductData() {
       return acc;
     }, {});
 
-    // --- マップ作成 (サイズ) --- (ロジック変更なし)
+    // --- マップ作成 (サイズ) ---
     const sizesMap = sizeValues.reduce((acc, row) => {
       const id = row[SIZE_MAP.kanriId];
       if (id) {
@@ -243,35 +242,22 @@ function getProductData() {
       return 0;
     };
     
-    // const placeholderUrl = "https://placehold.co/400x400/f3f4f6/9ca3af?text=No+Image"; // 削除
-
     for (const row of kikakuValues) {
       const kanriId = row[KIKAKU_MAP.kanriId];
       if (!kanriId) continue;
 
-      // const fabricInfo = fabricsMap[kanriId] || {}; // 削除
-      
       const shashinIds = photosMap[kanriId] || [];
       const imageSources = []; // Base64データのみを格納
 
       if (shashinIds.length > 0) {
         shashinIds.forEach(sid => {
-            // Base64データを取得
             const fileData = imageBase64Map[sid]; 
             if (fileData && fileData.data) {
                 imageSources.push(fileData.data);
-            } else {
-                // Base64データがない場合は何も追加しない (プレースホルダーを挿入しない)
-                Logger.log(`警告: 管理ID ${kanriId} (絵型ID ${sid}) のBase64データが見つからないか、変換に失敗しました。`); 
             }
         });
       }
       
-      // ★修正: 画像がない場合のプレースホルダー挿入ロジックを削除
-      // if (imageSources.length === 0) {
-      //   imageSources.push(placeholderUrl);
-      // }
-
       const product = {
         id: row[KIKAKU_MAP.hinban] || kanriId,
         kanriId: kanriId, 
@@ -281,21 +267,21 @@ function getProductData() {
         status: row[KIKAKU_MAP.shinchoku] || "N/A",
         colors: colorsMap[kanriId] || [],
         
-        // 上代・下代を取得
         price_retail: cleanPrice(row[KIKAKU_MAP.jodai]),
         price_wholesale: cleanPrice(row[KIKAKU_MAP.gedai]),
         
-        // 生地情報を企画管理シートから直接取得 (インデックス 11, 12)
         material_name: row[KIKAKU_MAP.material_name] || "N/A",
-        // composition (混率) はN/Aに固定
-        composition: "N/A", 
-        sizes: sizesMap[kanriId] || [],
-        fabric_number: row[KIKAKU_MAP.fabric_number] || "N/A", // 生地番号(11)
         
-        // 仮品番をデータに含める
+        // ★修正: 新しい項目への対応 (現在は空文字やN/A)
+        // データ列が確定したら、row[14] などに変更してください
+        composition: "N/A", // 混率
+        inseam: "",         // 股下
+        
+        sizes: sizesMap[kanriId] || [],
+        fabric_number: row[KIKAKU_MAP.fabric_number] || "N/A",
+        
         kariHinban: row[KIKAKU_MAP.kariHinban] || "",
         
-        // Base64データを画像ソースとして渡す
         images: imageSources, 
         imageUrl: imageSources[0] 
       };
@@ -306,7 +292,6 @@ function getProductData() {
     return productData;
 
   } catch (err) {
-    // throw Errorの場合も、ここでフロントエンドに返す
     Logger.log("Error in getProductData: " + err);
     return { error: `データの読み込み中にエラーが発生しました: ${err.message}` };
   }
