@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ナカノ企画書</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- SortableJS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    
+    <style>
+        /* 共通スタイル */
+        body { font-family: 'Noto Sans JP', 'Inter', sans-serif; }
+        
+        /* --- ビュー切り替え用 --- */
+        .view-section { display: none; }
+        .view-section.active { display: block; }
+
+        /* --- カタログ（B4）用スタイル --- */
+        @media print {
+            @page { size: B4 landscape; margin: 0; }
+            body { background: none; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            
+            /* 印刷時はカタログビュー以外を非表示に */
+            #main-view { display: none !important; }
+            #catalog-view { display: block !important; }
+            .no-print { display: none !important; }
+            
+            /* ページごとの設定 */
+            .sheet { 
+                box-shadow: none; 
+                margin: 0; 
+                width: 100%; 
+                height: 100vh; /* 1ページの高さを画面いっぱいに */
+                page-break-after: always; /* シートごとに必ず改ページ */
+                break-after: page;
+            }
+            /* 最後のページは改ページしない（白紙防止） */
+            .sheet:last-child { page-break-after: auto; break-after: auto; }
+            
+            /* 印刷時の背景色調整 */
+            #catalog-view { background: white; }
+            .sheet-wrapper { margin-bottom: 0; }
+        }
+        
+        /* 画面表示時のカタログスタイル */
+        #catalog-view { background-color: #52525b; /* ダークグレー背景で見やすく */ }
+        
+        .sheet-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 40px;
+        }
+        
+        .sheet-header {
+            width: 364mm;
+            color: white;
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* カタログシート定義 (B4横) */
+        .sheet {
+            background-color: white;
+            width: 364mm; height: 257mm; 
+            padding: 10mm 5mm 5mm 5mm;
+            position: relative;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            box-sizing: border-box;
+            overflow: hidden;
+            display: flex; flex-direction: column;
+            transform-origin: top center; /* ズーム用 */
+        }
+        
+        /* カタログ内グリッド (標準: 24面) */
+        .product-grid-b4 {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            grid-template-rows: repeat(4, 1fr);
+            gap: 2px;
+            height: 100%; width: 100%;
+            min-height: 0;
+        }
+
+        /* カタログ内グリッド (拡大: 8面 - 4列x2行) */
+        .product-grid-b4-large {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            gap: 4px;
+            height: 100%; width: 100%;
+            min-height: 0;
+        }
+        
+        /* カタログカード & 一覧用カード共通スタイル */
+        .cat-card {
+            border: 1px solid #000;
+            display: flex; flex-direction: column;
+            background: #fff; 
+            overflow: hidden; position: relative;
+            cursor: pointer;
+            /* 一覧画面での高さ確保のため */
+            min-height: 280px; 
+        }
+        /* カタログ画面では高さいっぱいに */
+        #catalog-view .cat-card { height: 100%; min-height: 0; cursor: grab; }
+        
+        .cat-card:active { cursor: grabbing; }
+        .cat-card.empty-slot { border: 1px dashed #ccc; background: #f9fafb; cursor: default; }
+        
+        /* ドラッグ中のスタイル */
+        .sortable-ghost { opacity: 0.4; background: #cce7ff; border: 2px dashed #007bff; }
+        
+        /* テーブルスタイル */
+        .mini-table { width: 100%; border-collapse: collapse; height: 100%; table-layout: fixed; }
+        .mini-table th, .mini-table td { border: 1px solid #444; padding: 0 1px; vertical-align: middle; line-height: 1.1; white-space: nowrap; overflow: hidden; font-size: 10px; }
+        
+        /* カタログプレビュー用 (標準) */
+        .product-grid-b4 .mini-table th, .product-grid-b4 .mini-table td { font-size: 6px; }
+        .product-grid-b4 .header-status { height: 12px; font-size: 7px; }
+        .product-grid-b4 .bn-mark { font-size: 8px; }
+        .product-grid-b4 .mini-brand-tag { width: 12px; height: 30px; font-size: 4px; }
+
+        /* カタログプレビュー用 (拡大) - 文字サイズ大きめ */
+        .product-grid-b4-large .mini-table th, .product-grid-b4-large .mini-table td { font-size: 10pt; padding: 2px 4px; } /* 読みやすいサイズ */
+        .product-grid-b4-large .header-status { height: 24px; font-size: 11pt; }
+        .product-grid-b4-large .bn-mark { font-size: 12pt; right: 4px; bottom: 4px; }
+        .product-grid-b4-large .mini-brand-tag { width: 20px; height: 50px; font-size: 8px; }
+        .product-grid-b4-large .cat-card { border-width: 2px; } /* 枠線少し太く */
+
+        .header-status { background-color: #daeef3; text-align: center; font-weight: bold; height: 18px; }
+
+        .price-wholesale { color: red; font-weight: bold; }
+        /* BNラベルのCSSを非表示にする */
+        .bn-mark { position: absolute; bottom: 1px; right: 1px; color: red; font-size: 10px; font-weight: bold; display: none; }
+        
+        /* MILDラベルは不要になったため、このCSSは機能しないが残しておく */
+        .mini-brand-tag { position: absolute; bottom: 5px; right: 10px; width: 16px; height: 40px; background: #ccc; border: 1px solid #888; font-size: 8px; writing-mode: vertical-rl; display: none; align-items: center; justify-content: center; }
+
+        /* タグスタイル (シンプル化) */
+        .tag-simple { 
+            font-size: 10px; 
+            padding: 2px 8px; 
+            border-radius: 9999px; 
+            background-color: #f3f4f6; 
+            color: #4b5563;
+            display: inline-block;
+        }
+
+        /* 選択時の枠線 */
+        .cat-card.selected {
+            outline: 3px solid #4f46e5; /* indigo-600 */
+            outline-offset: -3px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <!-- ローディング -->
+    <div id="loading-spinner" class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm">
+        <i class="fas fa-sync fa-spin text-4xl text-indigo-600"></i>
+        <p class="mt-4 text-gray-600">データを読み込んでいます...</p>
+    </div>
+
+    <!-- ==============================
+         ビュー1: 商品一覧・検索画面 
+         ============================== -->
+    <div id="main-view" class="view-section active container mx-auto p-4 md:p-8 mb-20">
+        
+        <header class="mb-8 flex justify-between items-end">
+            <div>
+                <h1 class="text-3xl md:text-4xl font-bold text-gray-800 mb-2">ナカノ企画書</h1>
+                <p class="text-gray-500">商品データベース</p>
+            </div>
+            <div class="text-right hidden md:block">
+                <p class="text-sm text-gray-400">最終更新日: 2025.05.08 (Mock)</p>
+            </div>
+        </header>
+
+        <!-- フィルター -->
+        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-8 sticky top-4 z-30">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="relative">
+                    <input type="text" id="search" placeholder="検索 (品名/品番)" class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 bg-gray-50">
+                    <i class="fa fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                </div>
+                <select id="category-filter" class="w-full p-2 border border-gray-300 rounded-md bg-gray-50">
+                    <option value="all">カテゴリー: すべて</option>
+                </select>
+                <select id="season-filter" class="w-full p-2 border border-gray-300 rounded-md bg-gray-50">
+                    <option value="all">シーズン: すべて</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 商品グリッド (一覧画面用) -->
+        <div id="product-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
+            <!-- JSで生成 -->
+        </div>
+        
+        <!-- 結果なし -->
+        <div id="no-results" class="hidden text-center py-12">
+            <p class="text-gray-500">該当なし</p>
+        </div>
+        
+        <!-- ボトムバー (選択時のみ表示) -->
+        <div id="selection-bar" class="fixed bottom-0 left-0 right-0 bg-gray-900 text-white p-4 transform translate-y-full transition-transform duration-300 z-40 shadow-lg flex justify-between items-center">
+            <div class="container mx-auto flex justify-between items-center px-4">
+                <div class="font-bold">
+                    <span id="selected-count" class="text-yellow-400 text-xl mr-1">0</span>
+                    点 選択中
+                </div>
+                <div class="flex gap-3">
+                    <button id="clear-selection" class="px-4 py-2 text-sm text-gray-300 hover:text-white">
+                        リセット
+                    </button>
+                    <button id="create-catalog-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-full shadow-lg transition transform hover:scale-105 flex items-center gap-2">
+                        <i class="fas fa-file-alt"></i>
+                        企画書を作成
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==============================
+         ビュー2: カタログ編集・プレビュー (B4) 
+         ============================== -->
+    <div id="catalog-view" class="view-section min-h-screen pb-20 hidden">
+        
+        <!-- カタログ操作バー -->
+        <div class="fixed top-0 left-0 right-0 bg-gray-800 text-white p-3 z-50 shadow-lg no-print">
+            <div class="container mx-auto flex flex-wrap justify-between items-center gap-2">
+                <div class="flex items-center gap-4">
+                    <button id="back-to-list" class="text-gray-300 hover:text-white flex items-center gap-2">
+                        <i class="fas fa-arrow-left"></i> <span class="hidden sm:inline">一覧に戻る</span>
+                    </button>
+                    <span class="font-bold text-lg border-l border-gray-600 pl-4">ナカノ企画書 編集</span>
+                </div>
+
+                <!-- 編集ツール -->
+                <div class="flex items-center gap-2 bg-gray-700 p-1 rounded-lg">
+                    <div class="flex items-center mr-4 border-r border-gray-500 pr-4">
+                        <span class="text-xs mr-2 text-gray-300">レイアウト:</span>
+                        <button id="layout-dense" class="px-3 py-1 text-sm bg-blue-600 rounded-l text-white border-r border-blue-700">24面(標準)</button>
+                        <button id="layout-large" class="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-500 rounded-r text-white">8面(大)</button>
+                    </div>
+                    
+                    <button id="auto-sort-category" class="px-3 py-1 text-sm bg-indigo-700 hover:bg-indigo-600 rounded text-white transition" title="カテゴリごとにページを分けます">
+                        <i class="fas fa-magic mr-1"></i>カテゴリ分け
+                    </button>
+                    <button id="add-page-btn" class="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-500 rounded text-white transition">
+                        <i class="fas fa-plus mr-1"></i>ページ追加
+                    </button>
+                </div>
+
+                <button onclick="window.print()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1.5 px-5 rounded shadow flex items-center gap-2">
+                    <i class="fas fa-print"></i> 印刷
+                </button>
+            </div>
+        </div>
+
+        <!-- カタログシート表示エリア -->
+        <div id="catalog-container" class="mt-20 flex flex-col items-center overflow-auto">
+            <!-- JSでここに複数のシート (.sheet) を生成 -->
+        </div>
+
+    </div>
+
+    <!-- モーダル (詳細表示用) -->
+    <div id="modal" class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 hidden">
+        <div id="modal-content" class="bg-white rounded-lg shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 relative">
+            <button id="close-modal" class="absolute top-4 right-4 text-2xl text-gray-500">&times;</button>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- グローバル変数 ---
+        let allProducts = [];
+        let selectedProductIds = new Set();
+        // カタログのページデータ: [[product1, product2...], [product25...]]
+        let catalogPages = []; 
+        let sortableInstances = [];
+        let currentLayout = 'dense'; // 'dense' (24面) or 'large' (8面)
+
+        // DOM要素
+        const els = {
+            mainView: document.getElementById('main-view'),
+            catalogView: document.getElementById('catalog-view'),
+            productGrid: document.getElementById('product-grid'),
+            catalogContainer: document.getElementById('catalog-container'),
+            selectionBar: document.getElementById('selection-bar'),
+            selectedCount: document.getElementById('selected-count'),
+            search: document.getElementById('search'),
+            catFilter: document.getElementById('category-filter'),
+            seaFilter: document.getElementById('season-filter'),
+            loading: document.getElementById('loading-spinner'),
+            modal: document.getElementById('modal'),
+            modalBody: document.getElementById('modal-body'),
+            btnDense: document.getElementById('layout-dense'),
+            btnLarge: document.getElementById('layout-large')
+        };
+
+        // --- 初期化 ---
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchData();
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            // フィルター
+            els.search.addEventListener('input', renderList);
+            els.catFilter.addEventListener('change', renderList);
+            els.seaFilter.addEventListener('change', renderList);
+
+            // 選択操作
+            document.getElementById('clear-selection').addEventListener('click', () => {
+                selectedProductIds.clear();
+                updateSelectionUI();
+                renderList();
+            });
+
+            // 画面遷移
+            document.getElementById('create-catalog-btn').addEventListener('click', initCatalogView);
+            document.getElementById('back-to-list').addEventListener('click', showListView);
+
+            // カタログ編集機能
+            document.getElementById('add-page-btn').addEventListener('click', () => {
+                addNewPage();
+                renderCatalogPages(); 
+            });
+            document.getElementById('auto-sort-category').addEventListener('click', autoSortByCategory);
+            
+            // レイアウト切り替え
+            els.btnDense.addEventListener('click', () => changeLayout('dense'));
+            els.btnLarge.addEventListener('click', () => changeLayout('large'));
+
+            // モーダル
+            document.getElementById('close-modal').addEventListener('click', () => els.modal.classList.add('hidden'));
+        }
+
+        function fetchData() {
+            els.loading.classList.remove('hidden');
+            google.script.run
+                .withSuccessHandler(data => {
+                    els.loading.classList.add('hidden');
+                    if (data.error) { alert(data.error); return; }
+                    allProducts = data;
+                    initFilters(data);
+                    renderList();
+                })
+                .withFailureHandler(err => {
+                    els.loading.classList.add('hidden');
+                    alert("読み込みエラー: " + err);
+                })
+                .getProductData();
+        }
+
+        function initFilters(data) {
+            const cats = [...new Set(data.map(p => p.category))].filter(Boolean).sort();
+            const seas = [...new Set(data.map(p => p.season))].filter(Boolean).sort();
+            
+            cats.forEach(c => {
+                const opt = document.createElement('option'); opt.value = c; opt.textContent = c;
+                els.catFilter.appendChild(opt);
+            });
+            seas.forEach(s => {
+                const opt = document.createElement('option'); opt.value = s; opt.textContent = s;
+                els.seaFilter.appendChild(opt);
+            });
+        }
+
+        // --- 一覧画面ロジック ---
+
+        function renderList() {
+            const term = els.search.value.toLowerCase();
+            const cat = els.catFilter.value;
+            const sea = els.seaFilter.value;
+
+            const filtered = allProducts.filter(p => {
+                const matchTerm = p.name.toLowerCase().includes(term) || String(p.id).toLowerCase().includes(term);
+                const matchCat = cat === 'all' || p.category === cat;
+                const matchSea = sea === 'all' || p.season === sea;
+                return matchTerm && matchCat && matchSea;
+            });
+
+            els.productGrid.innerHTML = '';
+            filtered.forEach(p => {
+                const isSelected = selectedProductIds.has(p.id);
+                
+                // カード生成（一覧画面用）
+                const card = document.createElement('div');
+                card.className = `cat-card shadow-md hover:shadow-lg transition-shadow ${isSelected ? 'selected' : ''}`;
+                
+                // 選択チェックボックス
+                const checkboxHtml = `
+                    <div class="absolute top-1 right-1 z-20">
+                        <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all shadow-sm ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-white/80 border-gray-400 hover:border-indigo-500'}">
+                            <i class="fas fa-check text-white text-[10px] ${isSelected ? '' : 'hidden'}"></i>
+                        </div>
+                    </div>
+                `;
+
+                // 一覧画面ではフォントサイズ調整なし(false)
+                card.innerHTML = checkboxHtml + createCardHTML(p, false);
+
+                // クリックイベント
+                card.addEventListener('click', (e) => {
+                    toggleSelection(p.id);
+                });
+
+                els.productGrid.appendChild(card);
+            });
+        }
+
+        function toggleSelection(id) {
+            if (selectedProductIds.has(id)) {
+                selectedProductIds.delete(id);
+            } else {
+                selectedProductIds.add(id);
+            }
+            updateSelectionUI();
+            renderList();
+        }
+
+        function updateSelectionUI() {
+            const count = selectedProductIds.size;
+            els.selectedCount.textContent = count;
+            if (count > 0) {
+                els.selectionBar.classList.remove('translate-y-full');
+            } else {
+                els.selectionBar.classList.add('translate-y-full');
+            }
+        }
+        
+        function openModal(p) {
+            // (モーダル処理は変更なし)
+        }
+
+
+        // --- カタログ機能ロジック ---
+
+        function changeLayout(mode) {
+            if (currentLayout === mode) return;
+            currentLayout = mode;
+            
+            // ボタンのスタイル更新
+            if (mode === 'dense') {
+                els.btnDense.classList.add('bg-blue-600', 'border-r', 'border-blue-700');
+                els.btnDense.classList.remove('bg-gray-600', 'hover:bg-gray-500');
+                els.btnLarge.classList.add('bg-gray-600', 'hover:bg-gray-500');
+                els.btnLarge.classList.remove('bg-blue-600');
+            } else {
+                els.btnLarge.classList.add('bg-blue-600');
+                els.btnLarge.classList.remove('bg-gray-600', 'hover:bg-gray-500');
+                els.btnDense.classList.add('bg-gray-600', 'hover:bg-gray-500');
+                els.btnDense.classList.remove('bg-blue-600', 'border-r', 'border-blue-700');
+            }
+
+            // 選択済みアイテムを全回収して再配置
+            const allItems = catalogPages.flat().filter(p => p !== null);
+            repaginate(allItems);
+            renderCatalogPages();
+        }
+
+        function initCatalogView() {
+            const selectedItems = allProducts.filter(p => selectedProductIds.has(p.id));
+            if (selectedItems.length === 0) return;
+
+            repaginate(selectedItems);
+            renderCatalogPages();
+
+            els.mainView.classList.remove('active');
+            els.catalogView.classList.remove('hidden');
+            els.catalogView.classList.add('active');
+            window.scrollTo(0, 0);
+        }
+        
+        function repaginate(items) {
+            catalogPages = [];
+            const perPage = currentLayout === 'dense' ? 24 : 8; // 24面 or 8面
+            
+            for (let i = 0; i < items.length; i += perPage) {
+                catalogPages.push(items.slice(i, i + perPage));
+            }
+            if (catalogPages.length === 0) catalogPages.push([]);
+        }
+
+        function showListView() {
+            els.catalogView.classList.remove('active');
+            els.catalogView.classList.add('hidden');
+            els.mainView.classList.add('active');
+        }
+
+        function addNewPage() {
+            catalogPages.push([]);
+        }
+
+        function autoSortByCategory() {
+            const selectedItems = catalogPages.flat().filter(p => p !== null);
+            if (selectedItems.length === 0) return;
+
+            const groups = {};
+            selectedItems.forEach(p => {
+                const cat = p.category || 'その他';
+                if (!groups[cat]) groups[cat] = [];
+                groups[cat].push(p);
+            });
+
+            // 現在のレイアウト設定に従ってページ分け
+            const perPage = currentLayout === 'dense' ? 24 : 8;
+            catalogPages = [];
+            
+            Object.keys(groups).sort().forEach(cat => {
+                const items = groups[cat];
+                for (let i = 0; i < items.length; i += perPage) {
+                    catalogPages.push(items.slice(i, i + perPage));
+                }
+            });
+            
+            renderCatalogPages();
+            alert("カテゴリごとにページを分けました！");
+        }
+
+        function renderCatalogPages() {
+            els.catalogContainer.innerHTML = '';
+            sortableInstances.forEach(s => s.destroy());
+            sortableInstances = [];
+
+            const perPage = currentLayout === 'dense' ? 24 : 8;
+            const gridClass = currentLayout === 'dense' ? 'product-grid-b4' : 'product-grid-b4-large';
+
+            catalogPages.forEach((pageItems, pageIndex) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'sheet-wrapper';
+                
+                const header = document.createElement('div');
+                header.className = 'sheet-header no-print';
+                header.innerHTML = `
+                    <span>PAGE ${pageIndex + 1} <span class="text-xs font-normal opacity-70 ml-2">(${pageItems.length} items)</span></span>
+                    ${catalogPages.length > 1 ? `<button class="text-xs bg-red-500 hover:bg-red-400 px-2 py-1 rounded" onclick="deletePage(${pageIndex})">このページを削除</button>` : ''}
+                `;
+                
+                const sheet = document.createElement('div');
+                sheet.className = 'sheet';
+                
+                const paperHeader = document.createElement('div');
+                paperHeader.className = 'h-[12mm] border-2 border-black flex items-center justify-between px-2 mb-[2mm] font-bold text-[14pt]';
+                paperHeader.innerHTML = `
+                    <span>ナカノ企画書</span>
+                    <div class="text-xs text-right leading-tight">
+                        No ${pageIndex + 1}
+                    </div>
+                `;
+                sheet.appendChild(paperHeader);
+
+                const grid = document.createElement('div');
+                grid.className = gridClass; // レイアウト用クラス適用
+                grid.dataset.pageIndex = pageIndex;
+
+                const displayItems = [...pageItems];
+                while (displayItems.length < perPage) displayItems.push(null);
+
+                displayItems.forEach((p, itemIndex) => {
+                    const card = document.createElement('div');
+                    if (p) {
+                        card.className = 'cat-card';
+                        card.dataset.id = p.id;
+                        // isDenseMode = (currentLayout === 'dense')
+                        // trueを渡すとフォントサイズ調整が無効化され、CSS定義の大きいフォントが使われる
+                        card.innerHTML = createCardHTML(p, currentLayout === 'dense'); 
+                    } else {
+                        card.className = 'cat-card empty-slot';
+                    }
+                    grid.appendChild(card);
+                });
+
+                sheet.appendChild(grid);
+                wrapper.appendChild(header);
+                wrapper.appendChild(sheet);
+                els.catalogContainer.appendChild(wrapper);
+
+                const sortable = new Sortable(grid, {
+                    group: 'shared-catalog',
+                    animation: 150,
+                    ghostClass: 'sortable-ghost',
+                    draggable: '.cat-card:not(.empty-slot)',
+                    onEnd: function (evt) {
+                        updateCatalogDataFromDOM();
+                    }
+                });
+                sortableInstances.push(sortable);
+            });
+        }
+
+        function updateCatalogDataFromDOM() {
+            const newPages = [];
+            // 現在のレイアウトクラスを持つグリッドを探す
+            const gridSelector = currentLayout === 'dense' ? '.product-grid-b4' : '.product-grid-b4-large';
+            const grids = document.querySelectorAll(gridSelector);
+            
+            grids.forEach(grid => {
+                const pageItems = [];
+                const cards = grid.querySelectorAll('.cat-card');
+                cards.forEach(card => {
+                    const id = card.dataset.id;
+                    if (id) {
+                        const product = allProducts.find(p => p.id == id);
+                        if (product) pageItems.push(product);
+                    }
+                });
+                newPages.push(pageItems);
+            });
+            catalogPages = newPages;
+        }
+
+        function deletePage(index) {
+            if (!confirm("このページを削除しますか？")) return;
+            catalogPages.splice(index, 1);
+            renderCatalogPages();
+        }
+
+        // カードHTML生成
+        // isDenseMode: trueなら「標準(24面)」用の極小フォントスタイルをインラインで適用
+        // falseなら（一覧や拡大モード）、CSSクラス側の指定に任せる（＝大きくなる）
+        function createCardHTML(p, isDenseMode) {
+            const imgs = p.images.slice(0, 3); 
+            // Base64データが取得できなかった場合、エラー画像を出す
+            const errorImgHtml = `<div class="text-xs text-red-500 mt-2">画像取得エラー (Base64なし)</div>`;
+            
+            const imgHtml = imgs.map(src => {
+                // Base64データがプレースホルダーURLでないかチェック
+                if (src.includes("placehold.co")) {
+                    return errorImgHtml;
+                }
+                return `<img src="${src}" onerror="this.nextElementSibling.style.display='block'; this.style.display='none'; console.error('Base64画像ロード失敗');" class="h-[95%] w-auto max-w-full object-contain border border-gray-100">
+                        <div class="absolute inset-0 bg-white/70 backdrop-blur-sm hidden text-center flex items-center justify-center text-red-600 font-bold text-xs p-1">画像表示エラー (権限/データ不足)</div>`;
+            }).join('');
+            
+            // 代替品のテキストを生成
+            const daiTaihinText = p.kariHinban ? `代替品: ${p.kariHinban}` : '';
+
+            return `
+                <div class="h-[60%] border-b border-black pointer-events-none">
+                    <table class="mini-table">
+                        <tr><th colspan="3" class="header-status">${p.status}</th></tr>
+                        <tr>
+                            <td class="bg-white text-center w-[25%]">品番</td>
+                            <td class="text-center font-bold w-[35%]">${p.id}</td>
+                            <td class="text-center w-[40%] border-b-0">展開色</td>
+                        </tr>
+                        <tr>
+                            <td class="bg-white text-center">参考上代</td>
+                            <td class="text-center font-bold">¥${p.price_retail.toLocaleString()}</td>
+                            <td rowspan="5" class="p-[1px] align-top leading-[1.2] whitespace-normal" style="${isDenseMode ? 'font-size:5px;' : ''}">
+                                ${p.colors.join('<br>')}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="bg-white text-center">最低下代</td>
+                            <td class="text-center price-wholesale">¥${p.price_wholesale.toLocaleString()}</td>
+                        </tr>
+                        <tr><td class="bg-white text-center">生地番号</td><td class="text-center scale-90 origin-left">${p.fabric_number}</td></tr>
+                        <tr><td class="bg-white text-center">素材名</td><td class="text-center scale-90 origin-left">${p.material_name}</td></tr>
+                        <tr><td class="bg-white text-center">混率</td><td class="text-center scale-90 origin-left">${p.composition}</td></tr>
+                        <tr>
+                            <td class="bg-white text-center border-t border-black">サイズ</td>
+                            <td colspan="2" class="text-center border-t border-black">${p.sizes.join(' ')}</td>
+                        </tr>
+                        <tr>
+                            <td class="bg-white text-center border-t border-black">品名</td>
+                            <td colspan="2" class="text-left pl-1 font-bold border-t border-black truncate">${p.name}</td>
+                        </tr>
+                        <tr>
+                            <td colspan="3" class="text-center text-red-500 font-bold" style="${isDenseMode ? 'font-size:5px;' : ''}">
+                                ${daiTaihinText}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="h-[40%] relative p-[2px] flex justify-center items-end gap-1 pointer-events-none">
+                    ${imgHtml}
+                    <!-- 右下のBNラベルを削除 -->
+                </div>
+            `;
+        }
+
+    </script>
+</body>
+</html>
