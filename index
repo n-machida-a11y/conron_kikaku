@@ -469,6 +469,7 @@
         let catalogPages = []; 
         let sortableInstances = [];
         let currentLayout = 'layout6';
+        let currentEditingSaveId = null; // 現在編集中の保存ID (New!)
         
         // 編集中のデータ保持用
         let editingProduct = null;
@@ -634,6 +635,11 @@
             if (selectedItems.length === 0) return;
             repaginate(selectedItems);
             renderCatalogPages();
+            
+            // 新規作成時はIDクリア
+            currentEditingSaveId = null;
+            els.catalogTitleInput.value = '';
+            
             els.mainView.classList.remove('active');
             els.catalogView.classList.remove('hidden');
             els.catalogView.classList.add('active');
@@ -1078,59 +1084,168 @@
             if(!title) { alert("企画書タイトルを入力してください"); return; }
             const flatItems = catalogPages.flat().filter(Boolean);
             if(flatItems.length === 0) { alert("商品が選択されていません"); return; }
-            const saveData = { title: title, date: new Date().toLocaleString('ja-JP'), layout: currentLayout, pages: catalogPages };
-            try {
-                let savedList = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-                savedList.unshift(saveData);
-                if(savedList.length > 10) savedList = savedList.slice(0, 10);
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(savedList));
-                alert(`「${title}」を一時保存しました。`);
-            } catch(e) { alert("保存に失敗しました: " + e.message); }
+
+            // 既存のIDがある（履歴から開いた）場合、選択肢を表示
+            if (currentEditingSaveId) {
+                showSaveOptionModal(title);
+            } else {
+                executeSave(false); // 新規保存
+            }
         }
+        
+        function showSaveOptionModal(title) {
+            els.modalBody.innerHTML = `
+                <div class="text-center py-8">
+                    <h3 class="text-2xl font-bold mb-4 text-gray-800">保存方法の選択</h3>
+                    <p class="mb-8 text-gray-600">この企画書は既に保存されています。<br>「${title}」を上書き保存しますか？<br>それとも新しく保存しますか？</p>
+                    <div class="flex justify-center gap-4">
+                        <button onclick="executeSave(true)" class="bg-indigo-600 text-white font-bold py-3 px-8 rounded shadow-lg hover:bg-indigo-700 transition">
+                            <i class="fas fa-save mr-2"></i>上書き保存
+                        </button>
+                        <button onclick="executeSave(false)" class="bg-teal-600 text-white font-bold py-3 px-8 rounded shadow-lg hover:bg-teal-700 transition">
+                            <i class="fas fa-file-export mr-2"></i>新規保存
+                        </button>
+                    </div>
+                    <button onclick="document.getElementById('modal').classList.add('hidden')" class="mt-6 text-gray-400 hover:text-gray-600 underline">キャンセル</button>
+                </div>
+            `;
+            els.modal.classList.remove('hidden');
+        }
+
+        function executeSave(isOverwrite) {
+            els.modal.classList.add('hidden');
+            const title = els.catalogTitleInput.value.trim();
+            
+            const saveData = { 
+                title: title, 
+                layout: currentLayout, 
+                pages: catalogPages,
+                // 上書きならIDを渡す、新規なら渡さない
+                saveId: isOverwrite ? currentEditingSaveId : null
+            };
+            
+            els.loading.classList.remove('hidden');
+
+            google.script.run
+                .withSuccessHandler(res => {
+                    els.loading.classList.add('hidden');
+                    if (res.error) {
+                        alert(res.error);
+                    } else {
+                        alert(res.message);
+                        if (!isOverwrite) currentEditingSaveId = null; 
+                    }
+                })
+                .withFailureHandler(err => {
+                    els.loading.classList.add('hidden');
+                    alert("通信エラー: " + err);
+                })
+                .saveCatalogToServer(saveData);
+        }
+
         function showSavedCatalogs() {
-            const list = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+            els.loading.classList.remove('hidden');
+            
+            google.script.run
+                .withSuccessHandler(list => {
+                    els.loading.classList.add('hidden');
+                    renderSavedListModal(list);
+                })
+                .withFailureHandler(err => {
+                    els.loading.classList.add('hidden');
+                    alert("リスト取得エラー: " + err);
+                })
+                .getSavedCatalogList();
+        }
+
+        function renderSavedListModal(list) {
             els.modalBody.innerHTML = list.length === 0 ? 
                 `<div class="text-center py-12"><p class="text-gray-500">保存された企画書はありません</p><button onclick="document.getElementById('modal').classList.add('hidden')" class="mt-6 px-6 py-2 bg-gray-500 text-white rounded">閉じる</button></div>` :
-                `<h3 class="text-2xl font-bold mb-6 text-gray-800">保存済み一覧</h3><div class="grid gap-4">${list.map((item, idx) => `
+                `<h3 class="text-2xl font-bold mb-6 text-gray-800">保存済み履歴 (サーバー)</h3>
+                 <div class="grid gap-4 max-h-[60vh] overflow-y-auto">
+                    ${list.map(item => `
                     <div class="border p-4 rounded flex justify-between items-center hover:bg-gray-50">
                         <div><h4 class="font-bold text-indigo-700">${item.title}</h4><div class="text-xs text-gray-500">${item.date}</div></div>
                         <div>
-                            <button onclick="loadCatalog(${idx})" class="bg-indigo-600 text-white px-3 py-1 rounded mr-2">開く</button>
-                            <button onclick="deleteCatalog(${idx})" class="text-red-500 px-2"><i class="fas fa-trash"></i></button>
+                            <button onclick="loadCatalog('${item.id}')" class="bg-indigo-600 text-white px-3 py-1 rounded mr-2">開く</button>
+                            <button onclick="deleteCatalog('${item.id}')" class="text-red-500 px-2"><i class="fas fa-trash"></i></button>
                         </div>
-                    </div>`).join('')}</div><div class="text-right mt-6"><button onclick="document.getElementById('modal').classList.add('hidden')" class="px-6 py-2 text-gray-600 border rounded">閉じる</button></div>`;
+                    </div>`).join('')}
+                 </div>
+                 <div class="text-right mt-6"><button onclick="document.getElementById('modal').classList.add('hidden')" class="px-6 py-2 text-gray-600 border rounded">閉じる</button></div>`;
             els.modal.classList.remove('hidden');
         }
-        function loadCatalog(index) {
-            if(!confirm("現在の内容を破棄して開きますか？")) return;
-            const target = JSON.parse(localStorage.getItem(STORAGE_KEY))[index];
-            catalogPages = target.pages;
-            currentLayout = target.layout || 'layout6';
-            els.catalogTitleInput.value = target.title;
-            if(currentLayout === 'layout6') els.btn6.click(); else els.btn8.click();
+
+        function loadCatalog(saveId) {
+            if(!confirm("現在の内容を破棄してサーバーから読み込みますか？")) return;
             
-            // マージ
-            const savedProducts = catalogPages.flat().filter(Boolean);
-            savedProducts.forEach(sp => {
-                const idx = allProducts.findIndex(p => p.id === sp.id);
-                if(idx > -1) allProducts[idx] = sp;
-            });
-            selectedProductIds.clear();
-            savedProducts.forEach(p => selectedProductIds.add(p.id));
-            updateSelectionUI();
-            renderCatalogPages();
-            els.mainView.classList.remove('active');
-            els.catalogView.classList.remove('hidden');
-            els.catalogView.classList.add('active');
-            window.scrollTo(0, 0);
-            els.modal.classList.add('hidden');
+            els.loading.classList.remove('hidden');
+            google.script.run
+                .withSuccessHandler(data => {
+                    els.loading.classList.add('hidden');
+                    if(data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    
+                    // データの復元
+                    catalogPages = data.pages;
+                    currentLayout = data.layout || 'layout6';
+                    els.catalogTitleInput.value = data.title;
+                    
+                    // 現在編集中のIDとしてセット (New!)
+                    currentEditingSaveId = data.saveId; 
+                    
+                    if(currentLayout === 'layout6') els.btn6.click(); else els.btn8.click();
+                    
+                    // 商品データのマージと選択状態の復元
+                    const savedProducts = catalogPages.flat().filter(Boolean);
+                    savedProducts.forEach(sp => {
+                        const idx = allProducts.findIndex(p => p.id === sp.id);
+                        if(idx > -1) {
+                             allProducts[idx] = sp;
+                        } else {
+                             allProducts.push(sp);
+                        }
+                    });
+                    
+                    selectedProductIds.clear();
+                    savedProducts.forEach(p => selectedProductIds.add(p.id));
+                    updateSelectionUI();
+                    renderCatalogPages();
+                    
+                    els.mainView.classList.remove('active');
+                    els.catalogView.classList.remove('hidden');
+                    els.catalogView.classList.add('active');
+                    window.scrollTo(0, 0);
+                    els.modal.classList.add('hidden');
+                })
+                .withFailureHandler(err => {
+                    els.loading.classList.add('hidden');
+                    alert("読み込みエラー: " + err);
+                })
+                .loadCatalogFromServer(saveId);
         }
-        function deleteCatalog(index) {
-            if(!confirm("削除しますか？")) return;
-            const list = JSON.parse(localStorage.getItem(STORAGE_KEY));
-            list.splice(index, 1);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-            showSavedCatalogs();
+
+        function deleteCatalog(saveId) {
+            if(!confirm("本当に削除しますか？（復元できません）")) return;
+            
+            els.loading.classList.remove('hidden');
+            google.script.run
+                .withSuccessHandler(res => {
+                    els.loading.classList.add('hidden');
+                    if(res.error) {
+                        alert(res.error);
+                    } else {
+                        // リスト再読み込み
+                        showSavedCatalogs();
+                    }
+                })
+                .withFailureHandler(err => {
+                    els.loading.classList.add('hidden');
+                    alert("削除エラー: " + err);
+                })
+                .deleteCatalogFromServer(saveId);
         }
 
     </script>
