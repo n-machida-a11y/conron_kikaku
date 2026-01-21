@@ -10,7 +10,7 @@ function doGet(e) {
 
 /**
  * 画像URLマップを作成する (Base64データを取得するため、キャッシュは利用しない)
- * シート名: 絵型 (旧: 写真)
+ * シート名: 画像 (旧: 絵型)
  */
 function getImageUrlMap() {
   Logger.log("画像URLマップの再構築を開始します (キャッシュ不使用)...");
@@ -18,19 +18,19 @@ function getImageUrlMap() {
   
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const photoSheet = ss.getSheetByName("絵型");
+    const photoSheet = ss.getSheetByName("画像");
     if (!photoSheet) {
-      Logger.log("シート「絵型」が見つかりませんでした。");
+      Logger.log("シート「画像」が見つかりませんでした。");
       return {};
     }
     
     const photoLastRow = photoSheet.getLastRow();
     if (photoLastRow < 2) return {};
     
+    // 画像シート: A:画像ID, B:管理ID, C:カテゴリ, D:写真
     const photoValues = photoSheet.getRange(2, 1, photoLastRow - 1, 4).getValues(); 
     
     let imageFolderName = null;
-    // D列 (Path) からフォルダ名（例: '絵型_Images'）を抽出
     for (const row of photoValues) {
       const path = row[3]; 
       if (path && typeof path === 'string' && path.includes('/')) {
@@ -40,18 +40,13 @@ function getImageUrlMap() {
     }
 
     if (!imageFolderName) {
-      Logger.log("画像フォルダ名が特定できませんでした。");
-      return {};
+      imageFolderName = "絵型_Images";
     }
     
-    Logger.log(`特定された画像フォルダ名: ${imageFolderName}`);
-    
-    // フォルダ検索ロジック
     let imageFolder = findFolder(imageFolderName);
 
     if (!imageFolder) {
-       Logger.log(`失敗: 画像フォルダ "${imageFolderName}" が見つかりません。`);
-       return {};
+      return {};
     }
     
     const files = imageFolder.getFiles();
@@ -62,16 +57,17 @@ function getImageUrlMap() {
 
       if (idPart) {
           try {
-             const bytes = file.getBlob().getBytes();
-             const base64Data = Utilities.base64Encode(bytes);
-             const mimeType = file.getMimeType();
-             
-             imageUrlMap[idPart] = {
-                 id: file.getId(), 
-                 data: `data:${mimeType};base64,${base64Data}` 
-             };
+            if (file.getSize() > 5 * 1024 * 1024) continue;
+            const bytes = file.getBlob().getBytes();
+            const base64Data = Utilities.base64Encode(bytes);
+            const mimeType = file.getMimeType();
+            
+            imageUrlMap[idPart] = {
+                id: file.getId(), 
+                data: `data:${mimeType};base64,${base64Data}` 
+            };
           } catch(e) {
-             Logger.log(`Base64変換エラー (${fileName}): ${e.message}`);
+            Logger.log(`Base64変換エラー (${fileName}): ${e.message}`);
           }
       }
     }
@@ -94,7 +90,6 @@ function findFolder(folderName) {
       const folders = parent.getFoldersByName(folderName);
       if (folders.hasNext()) return folders.next();
     }
-    // 親に見つからなければ全体検索
     const folders = DriveApp.getFoldersByName(folderName);
     if (folders.hasNext()) return folders.next();
   } catch (e) {
@@ -110,65 +105,57 @@ function getProductData() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     
-    const kikakuSheet = ss.getSheetByName("企画管理");
-    const colorSheet = ss.getSheetByName("カラー");
-    const sizeSheet = ss.getSheetByName("サイズ");
-    const photoSheet = ss.getSheetByName("絵型");
+    const mainSheet = ss.getSheetByName("商品管理書");
+    const colorSelectSheet = ss.getSheetByName("カラー選択");
+    const colorMasterSheet = ss.getSheetByName("カラーマスタ");
+    const photoSheet = ss.getSheetByName("画像");
     
-    if (!kikakuSheet) throw new Error("スプレッドシート内に「企画管理」シートが見つかりませんでした。");
+    if (!mainSheet) throw new Error("スプレッドシート内に「商品管理書」シートが見つかりませんでした。");
     
-    const kikakuLastRow = kikakuSheet.getLastRow();
-    const colorLastRow = colorSheet ? colorSheet.getLastRow() : 1;
-    const sizeLastRow = sizeSheet ? sizeSheet.getLastRow() : 1;
+    const mainLastRow = mainSheet.getLastRow();
+    const colorSelectLastRow = colorSelectSheet ? colorSelectSheet.getLastRow() : 1;
+    const colorMasterLastRow = colorMasterSheet ? colorMasterSheet.getLastRow() : 1;
     const photoLastRow = photoSheet ? photoSheet.getLastRow() : 1;
 
-    const KIKAKU_MAX_COL = 16; 
-    const kikakuValues = (kikakuLastRow > 1) ? kikakuSheet.getRange(2, 1, kikakuLastRow - 1, KIKAKU_MAX_COL).getValues() : [];
-    const colorValues = (colorLastRow > 1 && colorSheet) ? colorSheet.getRange(2, 1, colorLastRow - 1, 3).getValues() : [];
-    const sizeValues = (sizeLastRow > 1 && sizeSheet) ? sizeSheet.getRange(2, 1, sizeLastRow - 1, 2).getValues() : [];
+    const mainValues = (mainLastRow > 1) ? mainSheet.getRange(2, 1, mainLastRow - 1, 36).getValues() : [];
+    const colorSelectValues = (colorSelectLastRow > 1 && colorSelectSheet) ? colorSelectSheet.getRange(2, 1, colorSelectLastRow - 1, 4).getValues() : [];
+    const colorMasterValues = (colorMasterLastRow > 1 && colorMasterSheet) ? colorMasterSheet.getRange(2, 1, colorMasterLastRow - 1, 2).getValues() : [];
     const photoValues = (photoLastRow > 1 && photoSheet) ? photoSheet.getRange(2, 1, photoLastRow - 1, 4).getValues() : [];
 
     const imageBase64Map = getImageUrlMap();
-
-    // カラーマスタ画像データの取得
     const colorImages = getColorMasterData();
 
-    const KIKAKU_MAP = {
-      kanriId: 0, kariHinban: 1, shinchoku: 13, hinban: 3, hinmei: 4, 
-      season: 5, category: 7, jodai: 9, gedai: 10, fabric_number: 11, material_name: 12
+    const MAIN_MAP = {
+      kanriId: 0, season: 5, category: 7, hinban: 9, hinmei: 10, 
+      size_raw: 11, inseam: 12, jodai: 19, gedai: 20, 
+      material_name: 24, fabric_number: 25, composition: 26, shinchoku: 35
     };
-    const COLOR_MAP = { kanriId: 1, colorName: 2 }; 
-    const SIZE_MAP = { kanriId: 0, size: 1 }; 
-    const PHOTO_MAP = { kanriId: 1, shashinId: 0 };
-    
-    const colorsMap = colorValues.reduce((acc, row) => {
-      const id = row[COLOR_MAP.kanriId];
-      if (id) {
-        if (!acc[id]) acc[id] = [];
-        acc[id].push(row[COLOR_MAP.colorName]);
-      }
-      return acc;
-    }, {});
 
-    const sizesMap = sizeValues.reduce((acc, row) => {
-      const id = row[SIZE_MAP.kanriId];
-      if (id) {
-        if (!acc[id]) acc[id] = [];
-        acc[id].push(row[SIZE_MAP.size]);
-      }
-      return acc;
-    }, {});
+    const colorCodeToName = {};
+    colorMasterValues.forEach(row => {
+      const code = row[0]; const name = row[1];
+      if (code) colorCodeToName[code] = name;
+    });
 
-    const photosMap = photoValues.reduce((acc, row) => {
-      const id = row[PHOTO_MAP.kanriId];
-      const shashinId = row[PHOTO_MAP.shashinId];
-      const cleanShashinId = shashinId ? String(shashinId).trim() : "";
-      if (id && cleanShashinId) {
-        if (!acc[id]) acc[id] = [];
-        if (!acc[id].includes(cleanShashinId)) acc[id].push(cleanShashinId);
+    const productColorsMap = {};
+    colorSelectValues.forEach(row => {
+      const pId = row[1]; const cCode = row[2];
+      if (pId && cCode) {
+        if (!productColorsMap[pId]) productColorsMap[pId] = [];
+        const cName = colorCodeToName[cCode] || cCode;
+        if (!productColorsMap[pId].includes(cName)) productColorsMap[pId].push(cName);
       }
-      return acc;
-    }, {});
+    });
+
+    const productPhotosMap = {};
+    photoValues.forEach(row => {
+      const pId = row[1]; const imgId = row[0];
+      if (pId && imgId) {
+        const cleanImgId = String(imgId).trim();
+        if (!productPhotosMap[pId]) productPhotosMap[pId] = [];
+        if (!productPhotosMap[pId].includes(cleanImgId)) productPhotosMap[pId].push(cleanImgId);
+      }
+    });
 
     const productData = [];
     const cleanPrice = (v) => {
@@ -177,11 +164,11 @@ function getProductData() {
       return 0;
     };
     
-    for (const row of kikakuValues) {
-      const kanriId = row[KIKAKU_MAP.kanriId];
+    for (const row of mainValues) {
+      const kanriId = row[MAIN_MAP.kanriId];
       if (!kanriId) continue;
 
-      const shashinIds = photosMap[kanriId] || [];
+      const shashinIds = productPhotosMap[kanriId] || [];
       const imageSources = [];
 
       if (shashinIds.length > 0) {
@@ -191,22 +178,26 @@ function getProductData() {
         });
       }
       
+      const sizeStr = row[MAIN_MAP.size_raw];
+      let sizes = [];
+      if (sizeStr) sizes = String(sizeStr).split(/[,、]/).map(s => s.trim()).filter(s => s);
+
       const product = {
-        id: row[KIKAKU_MAP.hinban] || kanriId,
+        id: row[MAIN_MAP.hinban] || kanriId,
         kanriId: kanriId, 
-        category: row[KIKAKU_MAP.category] || "N/A",
-        season: row[KIKAKU_MAP.season] || "N/A",
-        name: row[KIKAKU_MAP.hinmei] || "（品名未設定）",
-        status: row[KIKAKU_MAP.shinchoku] || "N/A",
-        colors: colorsMap[kanriId] || [],
-        price_retail: cleanPrice(row[KIKAKU_MAP.jodai]),
-        price_wholesale: cleanPrice(row[KIKAKU_MAP.gedai]),
-        material_name: row[KIKAKU_MAP.material_name] || "N/A",
-        composition: "N/A",
-        inseam: "",
-        sizes: sizesMap[kanriId] || [],
-        fabric_number: row[KIKAKU_MAP.fabric_number] || "N/A",
-        kariHinban: row[KIKAKU_MAP.kariHinban] || "",
+        category: row[MAIN_MAP.category] || "N/A",
+        season: row[MAIN_MAP.season] || "N/A",
+        name: row[MAIN_MAP.hinmei] || "（品名未設定）",
+        status: row[MAIN_MAP.shinchoku] || "未承認",
+        colors: productColorsMap[kanriId] || [],
+        price_retail: cleanPrice(row[MAIN_MAP.jodai]),
+        price_wholesale: cleanPrice(row[MAIN_MAP.gedai]),
+        material_name: row[MAIN_MAP.material_name] || "N/A",
+        composition: row[MAIN_MAP.composition] || "N/A",
+        inseam: row[MAIN_MAP.inseam] || "",
+        sizes: sizes,
+        fabric_number: row[MAIN_MAP.fabric_number] || "N/A",
+        kariHinban: "",
         images: imageSources, 
         imageUrl: imageSources[0] 
       };
@@ -235,9 +226,6 @@ function getColorMasterData() {
   const data = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
   const colorMap = {};
   
-  const folder = findFolder("ColorMaster_Images");
-  if(!folder) return {};
-
   data.forEach(row => {
     const colorName = row[1];
     const fileId = row[2];
@@ -247,9 +235,7 @@ function getColorMasterData() {
          const blob = file.getBlob();
          const b64 = Utilities.base64Encode(blob.getBytes());
          colorMap[colorName] = `data:${blob.getMimeType()};base64,${b64}`;
-       } catch(e) {
-         console.log(`カラー画像取得エラー(${colorName}): ${e.message}`);
-       }
+       } catch(e) {}
     }
   });
   
@@ -258,7 +244,6 @@ function getColorMasterData() {
 
 /**
  * カラー画像をアップロードしてカラーマスタに保存する
- * 修正: 既存のカラー名があれば上書き更新し、行を増やさない
  */
 function uploadColorImage(colorName, base64Data) {
   try {
@@ -266,17 +251,13 @@ function uploadColorImage(colorName, base64Data) {
     let sheet = ss.getSheetByName("カラーマスタ");
     if (!sheet) {
       sheet = ss.insertSheet("カラーマスタ");
-      sheet.appendRow(["カラーマスタID", "カラー名", "色画像(FileID)"]);
+      sheet.appendRow(["カラーコード", "カラー名", "画像ID"]);
     }
     
-    // フォルダ確保
     const FOLDER_NAME = "ColorMaster_Images";
     let folder = findFolder(FOLDER_NAME);
-    if (!folder) {
-      folder = DriveApp.createFolder(FOLDER_NAME);
-    }
+    if (!folder) folder = DriveApp.createFolder(FOLDER_NAME);
     
-    // Base64デコードしてファイル作成
     const contentType = base64Data.substring(5, base64Data.indexOf(';'));
     const bytes = Utilities.base64Decode(base64Data.substr(base64Data.indexOf('base64,') + 7));
     const blob = Utilities.newBlob(bytes, contentType, `${colorName}_swatch.png`);
@@ -284,31 +265,156 @@ function uploadColorImage(colorName, base64Data) {
     const file = folder.createFile(blob);
     const fileId = file.getId();
     
-    // 重複チェックと上書き処理
     const lastRow = sheet.getLastRow();
     let updated = false;
     
     if (lastRow > 1) {
-      // B列(カラー名)を取得
       const colorNames = sheet.getRange(2, 2, lastRow - 1, 1).getValues().flat();
       const rowIndex = colorNames.indexOf(colorName);
-      
       if (rowIndex !== -1) {
-        // 既存行が見つかった場合、C列(画像ID)を更新 (データ範囲は2行目からなので +2)
         sheet.getRange(rowIndex + 2, 3).setValue(fileId);
         updated = true;
       }
     }
     
-    // 新規の場合のみ行を追加
     if (!updated) {
-      const id = Utilities.getUuid();
-      sheet.appendRow([id, colorName, fileId]);
+      const newCode = Utilities.getUuid();
+      sheet.appendRow([newCode, colorName, fileId]);
     }
     
     return { success: true, fileId: fileId };
-    
   } catch (e) {
     return { error: e.toString() };
+  }
+}
+
+/**
+ * 企画書データを保存する（上書き対応）
+ */
+function saveCatalogToServer(catalogData) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let historySheet = ss.getSheetByName("企画書履歴");
+    if (!historySheet) {
+      historySheet = ss.insertSheet("企画書履歴");
+      historySheet.appendRow(["保存ID", "タイトル", "作成日時", "ファイルID"]);
+      historySheet.setColumnWidth(1, 150);
+      historySheet.setColumnWidth(2, 250);
+      historySheet.setColumnWidth(3, 150);
+      historySheet.setColumnWidth(4, 150);
+    }
+
+    const FOLDER_NAME = "Saved_Catalogs";
+    let folder = findFolder(FOLDER_NAME);
+    if (!folder) folder = DriveApp.createFolder(FOLDER_NAME);
+
+    const jsonString = JSON.stringify(catalogData);
+    const fileName = `${catalogData.title}_${Utilities.formatDate(new Date(), "JST", "yyyyMMdd_HHmmss")}.json`;
+    const blob = Utilities.newBlob(jsonString, "application/json", fileName);
+    const newFile = folder.createFile(blob);
+    const newFileId = newFile.getId();
+    
+    const now = new Date();
+    const overwriteId = catalogData.saveId; 
+    let isUpdated = false;
+
+    if (overwriteId) {
+       const data = historySheet.getDataRange().getValues();
+       for (let i = 1; i < data.length; i++) {
+         if (data[i][0] === overwriteId) {
+           const rowIndex = i + 1;
+           const oldFileId = data[i][3];
+           if(oldFileId) {
+             try { DriveApp.getFileById(oldFileId).setTrashed(true); } catch(e) {}
+           }
+           historySheet.getRange(rowIndex, 2).setValue(catalogData.title);
+           historySheet.getRange(rowIndex, 3).setValue(now);
+           historySheet.getRange(rowIndex, 4).setValue(newFileId);
+           isUpdated = true;
+           break;
+         }
+       }
+    }
+
+    if (!isUpdated) {
+      const newSaveId = overwriteId || Utilities.getUuid();
+      historySheet.appendRow([newSaveId, catalogData.title, now, newFileId]);
+    }
+    
+    return { success: true, message: isUpdated ? "企画書を上書き保存しました。" : "企画書を新規保存しました。" };
+
+  } catch (e) {
+    return { error: "保存に失敗しました: " + e.message };
+  }
+}
+
+function getSavedCatalogList() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const historySheet = ss.getSheetByName("企画書履歴");
+    if (!historySheet || historySheet.getLastRow() < 2) return [];
+    
+    const data = historySheet.getRange(2, 1, historySheet.getLastRow() - 1, 3).getValues();
+    const list = data.map(row => ({
+      id: row[0],
+      title: row[1],
+      date: Utilities.formatDate(new Date(row[2]), "JST", "yyyy/MM/dd HH:mm")
+    })).reverse();
+    return list;
+  } catch (e) {
+    return [];
+  }
+}
+
+function loadCatalogFromServer(saveId) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const historySheet = ss.getSheetByName("企画書履歴");
+    if (!historySheet) throw new Error("履歴シートが見つかりません");
+    
+    const data = historySheet.getDataRange().getValues();
+    const targetRow = data.find(row => row[0] === saveId);
+    
+    if (!targetRow) throw new Error("指定された保存データが見つかりません");
+    
+    const fileId = targetRow[3];
+    const file = DriveApp.getFileById(fileId);
+    const jsonString = file.getBlob().getDataAsString();
+    
+    const result = JSON.parse(jsonString);
+    result.saveId = saveId; 
+    return result;
+  } catch (e) {
+    return { error: "読み込みに失敗しました: " + e.message };
+  }
+}
+
+function deleteCatalogFromServer(saveId) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const historySheet = ss.getSheetByName("企画書履歴");
+    if (!historySheet) return { error: "履歴シートが見つかりません" };
+    
+    const data = historySheet.getDataRange().getValues();
+    let rowIndex = -1;
+    let fileId = null;
+    
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === saveId) {
+        rowIndex = i + 1;
+        fileId = data[i][3];
+        break;
+      }
+    }
+    
+    if (rowIndex === -1) return { error: "削除対象が見つかりません" };
+    
+    if (fileId) {
+      try { DriveApp.getFileById(fileId).setTrashed(true); } catch (err) {}
+    }
+    historySheet.deleteRow(rowIndex);
+    return { success: true };
+  } catch (e) {
+    return { error: "削除エラー: " + e.message };
   }
 }
