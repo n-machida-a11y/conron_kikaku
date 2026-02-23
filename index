@@ -275,8 +275,8 @@
             flex-shrink: 0;
             padding: 4px 0 0 0;
             background-color: #fff;
-            /* 縦幅を固定: 色4行分（48px×4 + ヘッダー20px）に相当 */
-            height: 220px;
+            /* 縦幅を4色展開基準で固定: color-cell 56px×4 + ヘッダー20px + 余白8px */
+            height: 248px;
             overflow: hidden;
         }
         
@@ -1114,6 +1114,13 @@
         }
         function handleImageUpload(input) {
             if (!editingProduct || !input.files[0]) return;
+            const currentCount = editingProduct.images ? editingProduct.images.length : 0;
+            if (currentCount >= 3) {
+                alert("画像は最大3枚までです。追加する場合は既存の画像を削除してください。");
+                input.value = '';
+                return;
+            }
+            const position = currentCount + 1; // 1:メイン左, 2:右上, 3:右下
             const reader = new FileReader();
             reader.onload = function(e) {
                 const base64 = e.target.result;
@@ -1136,7 +1143,7 @@
                         alert("通信エラー: " + err);
                         input.value = '';
                     })
-                    .uploadProductImage(editingProduct.kanriId, base64);
+                    .uploadProductImage(editingProduct.kanriId, base64, position);
             };
             reader.readAsDataURL(input.files[0]);
         }
@@ -1146,12 +1153,12 @@
             editingProduct.images.splice(index, 1);
             if (editingProduct.imageFileIds) editingProduct.imageFileIds.splice(index, 1);
             renderEditModalContent();
-            // DriveとシートからもfileIdがある場合は削除
+            // DriveとシートからもfileIdがある場合は削除（残り画像の位置も詰め直す）
             if (fileId) {
                 google.script.run
                     .withSuccessHandler(() => {})
                     .withFailureHandler(err => console.error("画像削除エラー:", err))
-                    .deleteProductImage(fileId);
+                    .deleteProductImage(fileId, editingProduct.kanriId);
             }
         }
         function saveEditedProduct() {
