@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ナカノ企画書</title>
+    <title>コンロン企画書</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Fonts -->
@@ -1079,6 +1079,7 @@
         }
 
         // --- 保存・読み込み機能 ---
+        // 変更点: 保存時に「上書き」か「新規」か選択できるようにする
         function saveCurrentCatalog() {
             const title = els.catalogTitleInput.value.trim();
             if(!title) { alert("企画書タイトルを入力してください"); return; }
@@ -1133,6 +1134,9 @@
                         alert(res.error);
                     } else {
                         alert(res.message);
+                        // 新規保存した場合でも、保存後はそれを「編集中のもの」として扱うためID再取得などをしたいが
+                        // ここでは簡易的に、新規保存後はIDリンクを切る（またはリロードを促す）
+                        // 今回は上書き保存した場合のみIDを維持し、新規の場合はIDをクリアするのが安全
                         if (!isOverwrite) currentEditingSaveId = null; 
                     }
                 })
