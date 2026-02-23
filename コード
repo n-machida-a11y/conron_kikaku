@@ -9,57 +9,42 @@ function doGet(e) {
 }
 
 /**
- * 画像URLマップを作成する
+ * 企画書用商品画像のURLマップを作成する
+ * 「企画書_画像」シート（A列:ファイルID, B列:商品管理ID）を参照
  */
 function getImageUrlMap() {
-  Logger.log("画像URLマップの再構築を開始します (キャッシュ不使用)...");
+  Logger.log("企画書用画像URLマップの再構築を開始します...");
   const imageUrlMap = {};
-  
+
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const photoSheet = ss.getSheetByName("画像");
+    const photoSheet = ss.getSheetByName("企画書_画像");
     if (!photoSheet) {
-      Logger.log("シート「画像」が見つかりませんでした。");
+      Logger.log("シート「企画書_画像」が見つかりませんでした。");
       return {};
     }
-    
+
     const photoLastRow = photoSheet.getLastRow();
     if (photoLastRow < 2) return {};
-    
-    const photoValues = photoSheet.getRange(2, 1, photoLastRow - 1, 4).getValues(); 
-    
-    let imageFolderName = "絵型_Images";
-    for (const row of photoValues) {
-      const path = row[3]; 
-      if (path && typeof path === 'string' && path.includes('/')) {
-        imageFolderName = path.split('/')[0];
-        break;
-      }
-    }
-    
-    let imageFolder = findFolder(imageFolderName);
-    if (!imageFolder) return {};
-    
-    const files = imageFolder.getFiles();
-    while (files.hasNext()) {
-      const file = files.next();
-      const fileName = file.getName();
-      let idPart = fileName.split('.')[0].trim();
 
-      if (idPart) {
-          try {
-            if (file.getSize() > 5 * 1024 * 1024) continue;
-            const bytes = file.getBlob().getBytes();
-            const base64Data = Utilities.base64Encode(bytes);
-            const mimeType = file.getMimeType();
-            
-            imageUrlMap[idPart] = {
-                id: file.getId(), 
-                data: `data:${mimeType};base64,${base64Data}` 
-            };
-          } catch(e) {
-            Logger.log(`Base64変換エラー (${fileName}): ${e.message}`);
-          }
+    // A列:ファイルID, B列:商品管理ID
+    const photoValues = photoSheet.getRange(2, 1, photoLastRow - 1, 2).getValues();
+
+    for (const row of photoValues) {
+      const fileId = String(row[0]).trim();
+      if (!fileId) continue;
+      try {
+        const file = DriveApp.getFileById(fileId);
+        if (file.getSize() > 5 * 1024 * 1024) continue;
+        const bytes = file.getBlob().getBytes();
+        const base64Data = Utilities.base64Encode(bytes);
+        const mimeType = file.getMimeType();
+        imageUrlMap[fileId] = {
+          id: fileId,
+          data: `data:${mimeType};base64,${base64Data}`
+        };
+      } catch(e) {
+        Logger.log(`Base64変換エラー (${fileId}): ${e.message}`);
       }
     }
     return imageUrlMap;
@@ -95,7 +80,7 @@ function getProductData() {
     const mainSheet = ss.getSheetByName("商品管理書");
     const colorSelectSheet = ss.getSheetByName("カラー選択");
     const colorMasterSheet = ss.getSheetByName("カラーマスタ");
-    const photoSheet = ss.getSheetByName("画像");
+    const photoSheet = ss.getSheetByName("企画書_画像"); // 企画書専用シート
     
     if (!mainSheet) throw new Error("スプレッドシート内に「商品管理書」シートが見つかりませんでした。");
     
@@ -107,7 +92,8 @@ function getProductData() {
     const mainValues = (mainLastRow > 1) ? mainSheet.getRange(2, 1, mainLastRow - 1, 36).getValues() : [];
     const colorSelectValues = (colorSelectLastRow > 1 && colorSelectSheet) ? colorSelectSheet.getRange(2, 1, colorSelectLastRow - 1, 4).getValues() : [];
     const colorMasterValues = (colorMasterLastRow > 1 && colorMasterSheet) ? colorMasterSheet.getRange(2, 1, colorMasterLastRow - 1, 2).getValues() : [];
-    const photoValues = (photoLastRow > 1 && photoSheet) ? photoSheet.getRange(2, 1, photoLastRow - 1, 4).getValues() : [];
+    // 企画書_画像シート: A列:ファイルID, B列:商品管理ID
+    const photoValues = (photoLastRow > 1 && photoSheet) ? photoSheet.getRange(2, 1, photoLastRow - 1, 2).getValues() : [];
 
     const imageBase64Map = getImageUrlMap();
     const colorImages = getColorMasterData(); // ここでカラー画像を取得
@@ -134,13 +120,14 @@ function getProductData() {
       }
     });
 
+    // productPhotosMap: kanriId -> [fileId, ...] のマップ
     const productPhotosMap = {};
     photoValues.forEach(row => {
-      const pId = row[1]; const imgId = row[0];
-      if (pId && imgId) {
-        const cleanImgId = String(imgId).trim();
+      const fileId = String(row[0]).trim();
+      const pId = row[1];
+      if (pId && fileId) {
         if (!productPhotosMap[pId]) productPhotosMap[pId] = [];
-        if (!productPhotosMap[pId].includes(cleanImgId)) productPhotosMap[pId].push(cleanImgId);
+        if (!productPhotosMap[pId].includes(fileId)) productPhotosMap[pId].push(fileId);
       }
     });
 
@@ -157,11 +144,15 @@ function getProductData() {
 
       const shashinIds = productPhotosMap[kanriId] || [];
       const imageSources = [];
+      const imageFileIds = [];
 
       if (shashinIds.length > 0) {
-        shashinIds.forEach(sid => {
-            const fileData = imageBase64Map[sid]; 
-            if (fileData && fileData.data) imageSources.push(fileData.data);
+        shashinIds.forEach(fileId => {
+          const fileData = imageBase64Map[fileId];
+          if (fileData && fileData.data) {
+            imageSources.push(fileData.data);
+            imageFileIds.push(fileId);
+          }
         });
       }
       
@@ -185,17 +176,84 @@ function getProductData() {
         sizes: sizes,
         fabric_number: row[MAIN_MAP.fabric_number] || "N/A",
         kariHinban: "",
-        images: imageSources, 
-        imageUrl: imageSources[0] 
+        images: imageSources,
+        imageFileIds: imageFileIds, // 各画像のDriveファイルID
+        imageUrl: imageSources[0]
       };
       productData.push(product);
     }
 
-    return { products: productData, colorImages: colorImages };
+    // カラーマスタから全カラー名リストを作成（画像未登録のカラーも含む）
+    const allColorNames = colorMasterValues
+      .map(row => row[1])
+      .filter(Boolean);
+
+    return { products: productData, colorImages: colorImages, colorNames: allColorNames };
 
   } catch (err) {
     Logger.log("Error in getProductData: " + err);
     return { error: `データの読み込み中にエラーが発生しました: ${err.message}` };
+  }
+}
+
+/**
+ * 企画書用商品画像をアップロードして「企画書_画像」シートに保存する
+ * @param {string} kanriId - 商品管理ID
+ * @param {string} base64Data - Base64エンコードされた画像データ
+ */
+function uploadProductImage(kanriId, base64Data) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName("企画書_画像");
+    if (!sheet) {
+      sheet = ss.insertSheet("企画書_画像");
+      sheet.appendRow(["ファイルID", "商品管理ID"]);
+    }
+
+    const FOLDER_NAME = "企画書_Images";
+    let folder = findFolder(FOLDER_NAME);
+    if (!folder) folder = DriveApp.createFolder(FOLDER_NAME);
+
+    const contentType = base64Data.substring(5, base64Data.indexOf(';'));
+    const bytes = Utilities.base64Decode(base64Data.substr(base64Data.indexOf('base64,') + 7));
+    const timestamp = Utilities.formatDate(new Date(), "JST", "yyyyMMddHHmmss");
+    const blob = Utilities.newBlob(bytes, contentType, `${kanriId}_${timestamp}.png`);
+
+    const file = folder.createFile(blob);
+    const fileId = file.getId();
+
+    sheet.appendRow([fileId, kanriId]);
+    SpreadsheetApp.flush();
+
+    return { success: true, fileId: fileId };
+  } catch (e) {
+    return { error: e.toString() };
+  }
+}
+
+/**
+ * 企画書用商品画像をDriveと「企画書_画像」シートから削除する
+ * @param {string} fileId - 削除するDriveファイルID
+ */
+function deleteProductImage(fileId) {
+  try {
+    try { DriveApp.getFileById(fileId).setTrashed(true); } catch(e) {}
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName("企画書_画像");
+    if (!sheet) return { success: true };
+
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() === String(fileId).trim()) {
+        sheet.deleteRow(i + 1);
+        break;
+      }
+    }
+    SpreadsheetApp.flush();
+    return { success: true };
+  } catch (e) {
+    return { error: e.toString() };
   }
 }
 

@@ -23,25 +23,33 @@
 
         /* --- カタログ（B4）用スタイル --- */
         @media print {
-            @page { size: B4 landscape; margin: 0; }
+            /* 余白を設けて両端の枠線切れを防ぐ */
+            @page { size: B4 landscape; margin: 6mm; }
             body { background: none; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            
+
             #main-view { display: none !important; }
             #catalog-view { display: block !important; }
             .no-print { display: none !important; }
-            
-            .sheet { 
-                box-shadow: none; 
-                margin: 0; 
-                width: 100%; 
-                height: 100vh;
+
+            /* 改ページ修正: sheet-wrapperではなくsheetに対して指定 */
+            .sheet-wrapper {
+                margin-bottom: 0;
                 page-break-after: always;
                 break-after: page;
             }
-            .sheet:last-child { page-break-after: auto; break-after: auto; }
-            
+            .sheet-wrapper:last-child { page-break-after: auto; break-after: auto; }
+
+            .sheet {
+                box-shadow: none;
+                margin: 0 auto;
+                /* @page margin 6mm×2 = 12mm を引いたサイズで枠線が収まるよう設定 */
+                width: calc(364mm - 12mm);
+                height: calc(257mm - 12mm);
+                page-break-after: avoid;
+                break-after: avoid;
+            }
+
             #catalog-view { background: white; }
-            .sheet-wrapper { margin-bottom: 0; }
         }
         
         #catalog-view { background-color: #52525b; }
@@ -77,6 +85,15 @@
         }
         
         /* グリッドレイアウト */
+        .product-grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: 1fr;
+            gap: 14px;
+            height: 100%; width: 100%;
+            min-height: 0;
+        }
+
         .product-grid-6 {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -234,7 +251,8 @@
             vertical-align: middle;
             line-height: 1.2;
             overflow: hidden;
-            white-space: nowrap;
+            white-space: normal; /* 文言見切れ修正: 折り返しを許可 */
+            word-break: break-all;
         }
         .cl-spec-table th {
             background-color: #f9f9f9;
@@ -257,6 +275,9 @@
             flex-shrink: 0;
             padding: 4px 0 0 0;
             background-color: #fff;
+            /* 縦幅を固定: 色4行分（48px×4 + ヘッダー20px）に相当 */
+            height: 220px;
+            overflow: hidden;
         }
         
         .cl-matrix-header-row {
@@ -341,6 +362,10 @@
         }
 
         /* レイアウト別の調整 */
+        .product-grid-3 .cl-spec-table { font-size: 12pt; }
+        .product-grid-3 .cl-spec-table th { width: 5em; }
+        .product-grid-3 .cl-order-table th, .product-grid-3 .cl-order-table td { font-size: 11pt; }
+
         .product-grid-6 .cl-spec-table { font-size: 10pt; }
         .product-grid-6 .cl-spec-table th { width: 4.5em; }
         .product-grid-6 .cl-order-table th, .product-grid-6 .cl-order-table td { font-size: 10pt; }
@@ -441,7 +466,8 @@
                 <div class="flex items-center gap-2 bg-gray-700 p-1 rounded-lg mt-1 md:mt-0 overflow-x-auto max-w-full">
                     <div class="flex items-center mr-2 md:mr-4 border-r border-gray-500 pr-2 md:pr-4 whitespace-nowrap">
                         <span class="text-xs mr-2 text-gray-300 hidden sm:inline">レイアウト:</span>
-                        <button id="layout-6" class="px-3 py-1 text-sm bg-blue-600 rounded-l text-white border-r border-blue-700">6面</button>
+                        <button id="layout-3" class="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-500 rounded-l text-white border-r border-gray-700">3面</button>
+                        <button id="layout-6" class="px-3 py-1 text-sm bg-blue-600 text-white border-r border-blue-700">6面</button>
                         <button id="layout-8" class="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-500 rounded-r text-white">8面</button>
                     </div>
                     <button id="auto-sort-category" class="px-3 py-1 text-sm bg-indigo-700 hover:bg-indigo-600 rounded text-white transition whitespace-nowrap"><i class="fas fa-magic mr-1"></i><span class="hidden sm:inline">カテゴリ</span></button>
@@ -465,6 +491,7 @@
         // --- グローバル変数 ---
         let allProducts = [];
         let colorMaster = {}; // カラー名 -> Base64画像 のマップ
+        let colorNameList = []; // 全カラー名リスト（画像未登録含む）
         let selectedProductIds = new Set();
         let catalogPages = []; 
         let sortableInstances = [];
@@ -491,6 +518,7 @@
             loading: document.getElementById('loading-spinner'),
             modal: document.getElementById('modal'),
             modalBody: document.getElementById('modal-body'),
+            btn3: document.getElementById('layout-3'),
             btn6: document.getElementById('layout-6'),
             btn8: document.getElementById('layout-8'),
             catalogTitleInput: document.getElementById('catalog-title-input'),
@@ -518,6 +546,7 @@
             document.getElementById('add-page-btn').addEventListener('click', () => { addNewPage(); renderCatalogPages(); });
             document.getElementById('auto-sort-category').addEventListener('click', autoSortByCategory);
             
+            els.btn3.addEventListener('click', () => changeLayout('layout3'));
             els.btn6.addEventListener('click', () => changeLayout('layout6'));
             els.btn8.addEventListener('click', () => changeLayout('layout8'));
             
@@ -537,10 +566,11 @@
                     els.loading.classList.add('hidden');
                     if (data.error) { alert(data.error); return; }
                     
-                    // GASから { products: [], colorImages: {} } の形式で返ってくる想定
+                    // GASから { products: [], colorImages: {}, colorNames: [] } の形式で返ってくる想定
                     if (data.products) {
                         allProducts = data.products;
                         colorMaster = data.colorImages || {};
+                        colorNameList = data.colorNames || [];
                     } else {
                         // 旧形式対応(念のため)
                         allProducts = data;
@@ -612,19 +642,27 @@
         function changeLayout(mode) {
             if (currentLayout === mode) return;
             currentLayout = mode;
-            
-            if (mode === 'layout6') {
-                els.btn6.classList.add('bg-blue-600', 'border-r', 'border-blue-700'); 
+
+            // 全ボタンをリセット
+            els.btn3.classList.remove('bg-blue-600');
+            els.btn3.classList.add('bg-gray-600', 'hover:bg-gray-500');
+            els.btn6.classList.remove('bg-blue-600', 'border-r', 'border-blue-700');
+            els.btn6.classList.add('bg-gray-600', 'hover:bg-gray-500');
+            els.btn8.classList.remove('bg-blue-600');
+            els.btn8.classList.add('bg-gray-600', 'hover:bg-gray-500');
+
+            // 選択ボタンをアクティブに
+            if (mode === 'layout3') {
+                els.btn3.classList.add('bg-blue-600');
+                els.btn3.classList.remove('bg-gray-600', 'hover:bg-gray-500');
+            } else if (mode === 'layout6') {
+                els.btn6.classList.add('bg-blue-600', 'border-r', 'border-blue-700');
                 els.btn6.classList.remove('bg-gray-600', 'hover:bg-gray-500');
-                els.btn8.classList.add('bg-gray-600', 'hover:bg-gray-500'); 
-                els.btn8.classList.remove('bg-blue-600');
             } else {
-                els.btn8.classList.add('bg-blue-600'); 
+                els.btn8.classList.add('bg-blue-600');
                 els.btn8.classList.remove('bg-gray-600', 'hover:bg-gray-500');
-                els.btn6.classList.add('bg-gray-600', 'hover:bg-gray-500'); 
-                els.btn6.classList.remove('bg-blue-600', 'border-r', 'border-blue-700');
             }
-            
+
             const allItems = catalogPages.flat().filter(p => p !== null);
             repaginate(allItems);
             renderCatalogPages();
@@ -648,7 +686,7 @@
         
         function repaginate(items) {
             catalogPages = [];
-            const perPage = currentLayout === 'layout6' ? 6 : 8;
+            const perPage = currentLayout === 'layout3' ? 3 : currentLayout === 'layout6' ? 6 : 8;
             for (let i = 0; i < items.length; i += perPage) catalogPages.push(items.slice(i, i + perPage));
             if (catalogPages.length === 0) catalogPages.push([]);
         }
@@ -670,7 +708,7 @@
                 if (!groups[cat]) groups[cat] = [];
                 groups[cat].push(p);
             });
-            const perPage = currentLayout === 'layout6' ? 6 : 8;
+            const perPage = currentLayout === 'layout3' ? 3 : currentLayout === 'layout6' ? 6 : 8;
             catalogPages = [];
             Object.keys(groups).sort().forEach(cat => {
                 const items = groups[cat];
@@ -684,8 +722,8 @@
             els.catalogContainer.innerHTML = '';
             sortableInstances.forEach(s => s.destroy());
             sortableInstances = [];
-            const perPage = currentLayout === 'layout6' ? 6 : 8;
-            const gridClass = currentLayout === 'layout6' ? 'product-grid-6' : 'product-grid-8';
+            const perPage = currentLayout === 'layout3' ? 3 : currentLayout === 'layout6' ? 6 : 8;
+            const gridClass = currentLayout === 'layout3' ? 'product-grid-3' : currentLayout === 'layout6' ? 'product-grid-6' : 'product-grid-8';
 
             catalogPages.forEach((pageItems, pageIndex) => {
                 const wrapper = document.createElement('div');
@@ -736,7 +774,7 @@
 
         function updateCatalogDataFromDOM() {
             const newPages = [];
-            const gridSelector = currentLayout === 'layout6' ? '.product-grid-6' : '.product-grid-8';
+            const gridSelector = currentLayout === 'layout3' ? '.product-grid-3' : currentLayout === 'layout6' ? '.product-grid-6' : '.product-grid-8';
             document.querySelectorAll(gridSelector).forEach(grid => {
                 const pageItems = [];
                 grid.querySelectorAll('.cat-card').forEach(card => {
@@ -847,7 +885,6 @@
                         
                         <!-- 下段: マトリクス表 -->
                         <div class="cl-matrix-area">
-                            <div class="cl-matrix-header-row"><span class="cl-sub-id">${p.id}</span></div>
                             <table class="cl-order-table">
                                 <thead><tr>${sizeHeaderHtml}</tr></thead>
                                 <tbody>${rowsHtml}</tbody>
@@ -982,6 +1019,19 @@
             els.modal.classList.remove('hidden');
         }
         
+        function initSizeSortable() {
+            const container = document.getElementById('size-tags-container');
+            if (!container) return;
+            new Sortable(container, {
+                animation: 150,
+                onEnd: () => {
+                    if (!editingProduct) return;
+                    const newSizes = [...container.querySelectorAll('[data-size]')].map(el => el.dataset.size);
+                    editingProduct.sizes = newSizes;
+                }
+            });
+        }
+
         function renderEditModalContent() {
             if (!editingProduct) return;
             const p = editingProduct;
@@ -1021,22 +1071,25 @@
                             <div><label class="block text-sm font-bold text-gray-700">股下</label><input type="text" id="edit-inseam" value="${p.inseam || ''}" class="mt-1 block w-full border border-gray-300 rounded p-2" onchange="updateEditingProduct('inseam', this.value)"></div>
                         </div>
                         <div class="bg-blue-50 p-3 rounded border border-blue-100">
-                            <label class="block text-sm font-bold text-blue-800 mb-2">サイズ展開</label>
-                            <div class="flex flex-wrap gap-2 mb-2">
-                                ${p.sizes.map((s, i) => `<div class="flex items-center bg-white border border-blue-200 rounded px-2 py-1 shadow-sm"><span class="text-sm mr-2 font-bold">${s}</span><button type="button" onclick="removeEditItem('sizes', ${i})" class="text-red-400 hover:text-red-600 font-bold">&times;</button></div>`).join('')}
+                            <label class="block text-sm font-bold text-blue-800 mb-2">サイズ展開 <span class="font-normal text-xs text-blue-600">（ドラッグで順番変更可）</span></label>
+                            <div id="size-tags-container" class="flex flex-wrap gap-2 mb-2 min-h-[32px]">
+                                ${p.sizes.map((s, i) => `<div class="flex items-center bg-white border border-blue-200 rounded px-2 py-1 shadow-sm cursor-grab select-none" data-size="${s}"><i class="fas fa-grip-vertical text-gray-300 mr-1 text-xs"></i><span class="text-sm mr-2 font-bold">${s}</span><button type="button" onclick="removeEditItem('sizes', ${i})" class="text-red-400 hover:text-red-600 font-bold">&times;</button></div>`).join('')}
                             </div>
                             <div class="flex gap-2">
-                                <input type="text" id="new-size-input" placeholder="追加" class="flex-1 border border-gray-300 rounded px-2 py-1 text-sm">
+                                <input type="text" id="new-size-input" placeholder="追加（例: S, M, L）" class="flex-1 border border-gray-300 rounded px-2 py-1 text-sm">
                                 <button type="button" onclick="addEditItem('sizes')" class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">追加</button>
                             </div>
                         </div>
                         <div class="bg-green-50 p-3 rounded border border-green-100">
-                            <label class="block text-sm font-bold text-green-800 mb-2">カラー展開</label>
+                            <label class="block text-sm font-bold text-green-800 mb-2">カラー展開 <span class="font-normal text-xs text-green-600">（カラーマスタから選択可）</span></label>
                             <div class="flex flex-wrap gap-2 mb-2">
                                 ${p.colors.map((c, i) => `<div class="flex items-center bg-white border border-green-200 rounded px-2 py-1 shadow-sm"><span class="text-sm mr-2 font-bold">${c}</span><button type="button" onclick="removeEditItem('colors', ${i})" class="text-red-400 hover:text-red-600 font-bold">&times;</button></div>`).join('')}
                             </div>
                             <div class="flex gap-2">
-                                <input type="text" id="new-color-input" placeholder="追加" class="flex-1 border border-gray-300 rounded px-2 py-1 text-sm">
+                                <input type="text" id="new-color-input" placeholder="カラー名を入力または選択" list="color-master-datalist" class="flex-1 border border-gray-300 rounded px-2 py-1 text-sm">
+                                <datalist id="color-master-datalist">
+                                    ${[...new Set([...colorNameList, ...Object.keys(colorMaster)])].map(c => `<option value="${c}">`).join('')}
+                                </datalist>
                                 <button type="button" onclick="addEditItem('colors')" class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">追加</button>
                             </div>
                         </div>
@@ -1047,8 +1100,10 @@
                     </div>
                 </form>
             `;
+            // サイズ並び替えSortable初期化（DOM描画後）
+            setTimeout(initSizeSortable, 50);
         }
-        
+
         function updateEditingProduct(key, value) { if(editingProduct) editingProduct[key] = value; }
         function removeEditItem(type, index) { if(editingProduct) { editingProduct[type].splice(index, 1); renderEditModalContent(); } }
         function addEditItem(type) {
@@ -1060,11 +1115,44 @@
         function handleImageUpload(input) {
             if (!editingProduct || !input.files[0]) return;
             const reader = new FileReader();
-            reader.onload = function(e) { editingProduct.images.push(e.target.result); renderEditModalContent(); };
+            reader.onload = function(e) {
+                const base64 = e.target.result;
+                els.loading.classList.remove('hidden');
+                google.script.run
+                    .withSuccessHandler(res => {
+                        els.loading.classList.add('hidden');
+                        if (res.error) {
+                            alert("画像のアップロードに失敗しました: " + res.error);
+                        } else {
+                            editingProduct.images.push(base64);
+                            if (!editingProduct.imageFileIds) editingProduct.imageFileIds = [];
+                            editingProduct.imageFileIds.push(res.fileId);
+                            renderEditModalContent();
+                        }
+                        input.value = '';
+                    })
+                    .withFailureHandler(err => {
+                        els.loading.classList.add('hidden');
+                        alert("通信エラー: " + err);
+                        input.value = '';
+                    })
+                    .uploadProductImage(editingProduct.kanriId, base64);
+            };
             reader.readAsDataURL(input.files[0]);
         }
         function removeImage(index) {
-            if (editingProduct && confirm("削除しますか？")) { editingProduct.images.splice(index, 1); renderEditModalContent(); }
+            if (!editingProduct || !confirm("削除しますか？")) return;
+            const fileId = editingProduct.imageFileIds ? editingProduct.imageFileIds[index] : null;
+            editingProduct.images.splice(index, 1);
+            if (editingProduct.imageFileIds) editingProduct.imageFileIds.splice(index, 1);
+            renderEditModalContent();
+            // DriveとシートからもfileIdがある場合は削除
+            if (fileId) {
+                google.script.run
+                    .withSuccessHandler(() => {})
+                    .withFailureHandler(err => console.error("画像削除エラー:", err))
+                    .deleteProductImage(fileId);
+            }
         }
         function saveEditedProduct() {
             if(!editingProduct) return;
