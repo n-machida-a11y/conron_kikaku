@@ -342,9 +342,10 @@
             padding: 1px;
             white-space: nowrap;
             overflow: hidden;
-            height: auto;
-            min-height: 14px;
+            /* height:1px で table{height:100%} による均等割りを有効にする */
+            height: 1px;
         }
+        .cl-order-table th { height: auto; } /* ヘッダー行はコンテンツに合わせる */
         .cl-order-table th { background-color: #f0f0f0; font-weight: normal; font-size: 0.9em; }
         
         /* カラー列のスタイル調整 */
@@ -372,8 +373,7 @@
             align-items: center;
             justify-content: center;
             width: 100%;
-            height: 100%; /* テーブル行に追従 */
-            min-height: 40px;
+            height: 100%;
             padding: 2px;
             cursor: pointer;
         }
@@ -386,9 +386,10 @@
             margin-top: 2px;
         }
         .color-cell-img-wrap {
-            width: 90%;       /* 幅を大きく使う */
-            max-width: 80px;  /* 制限も設ける */
-            height: 36px;     /* 高さを確保 */
+            width: 90%;
+            max-width: 80px;
+            flex: 1;          /* 固定heightをやめて行高さに追従 */
+            min-height: 0;
             margin-bottom: 2px;
             border: 1px dashed #ccc; 
             background: #fafafa;
@@ -865,8 +866,9 @@
                 const colors = p.colors.length > 0 ? p.colors : [];
 
                 // サイズ・カラーともに最低5列/行、超えた分は追加表示
+                // 3面は余裕があるので7行
                 const MIN_COLS = 5;
-                const MIN_COLOR_ROWS = 5;
+                const MIN_COLOR_ROWS = currentLayout === 'layout3' ? 7 : 5;
 
                 const displaySizes = [...sizes];
                 while (displaySizes.length < MIN_COLS) displaySizes.push(null);
