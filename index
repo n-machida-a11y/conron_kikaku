@@ -978,7 +978,7 @@
                 return `
                     <div class="h-[60%] border-b border-black pointer-events-none">
                         <table class="mini-table">
-                            <tr><th colspan="3" class="header-status">${p.bunruiCode || p.status}</th></tr>
+                            <tr><th colspan="3" class="header-status">${p.bunruiCode || ''}</th></tr>
                             <tr>
                                 <td class="bg-white text-center w-[25%]">品番</td>
                                 <td class="text-center font-bold w-[35%]">${p.id}</td>
