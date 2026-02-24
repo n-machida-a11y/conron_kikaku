@@ -832,33 +832,40 @@
                 const wholesalePrice = p.price_wholesale ? `@${p.price_wholesale.toLocaleString()}` : "-";
                 
                 const sizes = p.sizes.length > 0 ? p.sizes : ['F'];
-                const colors = p.colors.length > 0 ? p.colors : ['-'];
+                const colors = p.colors.length > 0 ? p.colors : [];
 
-                let sizeHeaderHtml = '<th class="cl-col-color"></th>'; 
+                // 最低5行表示、5行未満は空行で埋める。5行超えは全て表示
+                const MIN_COLOR_ROWS = 5;
+                const displayColors = [...colors];
+                while (displayColors.length < MIN_COLOR_ROWS) displayColors.push(null);
+
+                let sizeHeaderHtml = '<th class="cl-col-color"></th>';
                 sizes.forEach(s => { sizeHeaderHtml += `<th>${s}</th>`; });
                 sizeHeaderHtml += '<th class="cl-col-total">計</th>';
 
                 let rowsHtml = '';
-                colors.forEach(c => {
-                    // カラー画像の有無チェック
-                    const colorImgSrc = colorMaster[c];
-                    let imgContent = '';
-                    let wrapClass = 'color-cell-img-wrap';
-                    
-                    if (colorImgSrc) {
-                        imgContent = `<img src="${colorImgSrc}" class="color-img-overlay">`;
-                        wrapClass += ' has-image';
+                displayColors.forEach(c => {
+                    let colorCellContent;
+                    if (c) {
+                        // カラーあり: 画像登録ボタン付きで表示
+                        const colorImgSrc = colorMaster[c];
+                        let imgContent = '';
+                        let wrapClass = 'color-cell-img-wrap';
+                        if (colorImgSrc) {
+                            imgContent = `<img src="${colorImgSrc}" class="color-img-overlay">`;
+                            wrapClass += ' has-image';
+                        } else {
+                            imgContent = `<i class="fas fa-plus text-[10px] text-gray-300"></i>`;
+                        }
+                        colorCellContent = `
+                            <div class="color-cell-content" title="クリックして画像を登録" onclick="triggerColorUpload('${c}')">
+                                <div class="${wrapClass}">${imgContent}</div>
+                                <span class="color-cell-text">${c}</span>
+                            </div>`;
                     } else {
-                         // 画像がない場合はプラスアイコンなどを表示して場所を明示
-                        imgContent = `<i class="fas fa-plus text-[10px] text-gray-300"></i>`;
+                        // 空行: 枠だけ表示
+                        colorCellContent = `<div class="color-cell-content"></div>`;
                     }
-                    
-                    const colorCellContent = `
-                        <div class="color-cell-content" title="クリックして画像を登録" onclick="triggerColorUpload('${c}')">
-                             <div class="${wrapClass}">${imgContent}</div>
-                             <span class="color-cell-text">${c}</span>
-                        </div>
-                    `;
 
                     let cells = `<td class="cl-col-color p-0">${colorCellContent}</td>`;
                     sizes.forEach(() => { cells += `<td></td>`; });
