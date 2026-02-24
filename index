@@ -23,17 +23,20 @@
 
         /* --- カタログ（B4）用スタイル --- */
         @media print {
-            /* ページ余白ゼロ: .sheet自体のpaddingで余白を管理 */
-            @page { size: B4 landscape; margin: 0; }
-            body { background: none; padding: 0; }
-
-            /* 枠線・背景色を全要素で確実に印刷する */
-            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            /* @page margin: 5mm → コンテンツエリアは 354mm × 247mm */
+            @page { size: B4 landscape; margin: 5mm; }
+            body {
+                background: none;
+                padding: 0;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
 
             #main-view { display: none !important; }
             #catalog-view { display: block !important; background: white; padding: 0 !important; }
             .no-print { display: none !important; }
 
+            /* 画面用余白(mt-20等)をリセット、flex解除でalign-items:centerを無効化 */
             #catalog-container {
                 margin: 0 !important;
                 padding: 0 !important;
@@ -50,12 +53,12 @@
             }
             .sheet-wrapper:last-child { page-break-after: auto; break-after: auto; }
 
-            /* B4横の正確なサイズを指定 (padding 8mm 6mm で内部余白を確保) */
+            /* @page margin 5mm×2=10mm をsheetサイズから引いてページに収める */
             .sheet {
                 box-shadow: none;
                 margin: 0;
-                width: 364mm;
-                height: 257mm;
+                width: 354mm;
+                height: 247mm;
                 page-break-after: avoid;
                 break-after: avoid;
                 overflow: hidden;
