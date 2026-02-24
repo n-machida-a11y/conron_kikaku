@@ -23,50 +23,66 @@
 
         /* --- カタログ（B4）用スタイル --- */
         @media print {
-            /* margin: 0 でブラウザ余白設定を完全に上書き。
-               .sheet自体の padding(8mm 6mm) で内側余白を確保する */
             @page { size: B4 landscape; margin: 0; }
-            body {
-                background: none;
-                padding: 0;
+
+            /* html/bodyの高さを完全リセット */
+            html, body {
+                height: auto !important;
+                min-height: 0 !important;
+                overflow: visible !important;
+                background: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
 
+            /* 一覧画面を非表示 */
             #main-view { display: none !important; }
+
+            /* カタログ画面を表示 - Tailwindのmin-h-screen/pb-20/hiddenを全てリセット */
             #catalog-view {
                 display: block !important;
-                background: white;
+                visibility: visible !important;
+                background: white !important;
                 padding: 0 !important;
-                min-height: 0 !important; /* min-h-screen(100vh)が空白ページを生成するためリセット */
-            }
-            .no-print { display: none !important; }
-
-            #catalog-container {
                 margin: 0 !important;
-                padding: 0 !important;
-                display: block !important;
+                min-height: 0 !important;
+                height: auto !important;
                 overflow: visible !important;
             }
 
+            /* .view-section { display:none } を #catalog-view で上書き */
+            .view-section#catalog-view { display: block !important; }
+
+            .no-print { display: none !important; }
+
+            /* mt-20/flex/overflow-autoをリセット */
+            #catalog-container {
+                display: block !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: visible !important;
+                height: auto !important;
+            }
+
             .sheet-wrapper {
-                display: block;
-                margin: 0;
-                padding: 0;
+                display: block !important;
+                margin: 0 !important;
+                padding: 0 !important;
                 page-break-after: always;
                 break-after: page;
             }
             .sheet-wrapper:last-child { page-break-after: auto; break-after: auto; }
 
-            /* B4横の正確なサイズ。padding(8mm 6mm)で内側余白を確保 */
             .sheet {
-                box-shadow: none;
-                margin: 0;
-                width: 364mm;
-                height: 257mm;
+                box-shadow: none !important;
+                margin: 0 !important;
+                width: 364mm !important;
+                height: 257mm !important;
                 page-break-after: avoid;
                 break-after: avoid;
-                overflow: hidden;
+                overflow: hidden !important;
             }
         }
         
