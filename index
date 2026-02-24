@@ -308,7 +308,7 @@
         .cl-matrix-area {
             flex: 3;      /* 上部(flex:2)より大きく → 上40% : 下60% */
             min-height: 0;
-            padding: 4px 0 0 0;
+            padding: 4px 1px 0 1px; /* 左右1px: border-collapseで左端の線が切れるのを防ぐ */
             background-color: #fff;
             overflow: hidden;
         }
