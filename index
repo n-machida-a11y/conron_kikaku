@@ -23,17 +23,26 @@
 
         /* --- カタログ（B4）用スタイル --- */
         @media print {
-            /* 余白を設けて両端の枠線切れを防ぐ */
             @page { size: B4 landscape; margin: 6mm; }
             body { background: none; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
             #main-view { display: none !important; }
-            #catalog-view { display: block !important; }
+            #catalog-view { display: block !important; background: white; padding: 0 !important; }
             .no-print { display: none !important; }
 
-            /* 改ページ修正: sheet-wrapperではなくsheetに対して指定 */
+            /* mt-20/pb-20 など画面用余白をリセット */
+            #catalog-container {
+                margin: 0 !important;
+                padding: 0 !important;
+                display: block !important;  /* flexを解除してalign-items:centerを無効化 */
+                overflow: visible !important;
+            }
+
+            /* sheet-wrapper の flex レイアウトをリセット */
             .sheet-wrapper {
-                margin-bottom: 0;
+                display: block;
+                margin: 0;
+                padding: 0;
                 page-break-after: always;
                 break-after: page;
             }
@@ -41,15 +50,13 @@
 
             .sheet {
                 box-shadow: none;
-                margin: 0 auto;
-                /* @page margin 6mm×2 = 12mm を引いたサイズで枠線が収まるよう設定 */
-                width: calc(364mm - 12mm);
+                margin: 0;
+                width: 100%;
                 height: calc(257mm - 12mm);
                 page-break-after: avoid;
                 break-after: avoid;
+                overflow: hidden;
             }
-
-            #catalog-view { background: white; }
         }
         
         #catalog-view { background-color: #52525b; }
@@ -170,7 +177,7 @@
         /* --- 上段エリア (画像 + スペック表) --- */
         .cl-top-section {
             display: flex;
-            flex: 1; 
+            flex: 2;   /* 下部(flex:3)より小さく → 上40% : 下60% */
             min-height: 0;
             border-bottom: 1px solid #000;
         }
@@ -272,7 +279,7 @@
 
         /* --- 下段エリア (マトリクス表) --- */
         .cl-matrix-area {
-            flex: 1;      /* 上部(cl-top-section)と同じflex:1で均等割り */
+            flex: 3;      /* 上部(flex:2)より大きく → 上40% : 下60% */
             min-height: 0;
             padding: 4px 0 0 0;
             background-color: #fff;
