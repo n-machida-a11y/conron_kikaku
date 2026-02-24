@@ -325,40 +325,49 @@
         }
         .cl-sub-id { font-size: 0.85em; font-weight: bold; }
 
-        .cl-order-table {
-            width: 100%;
+        /* カラーマトリクスをflexboxで実装（テーブルではなくdiv） */
+        .cl-matrix-flex {
+            display: flex;
+            flex-direction: column;
             height: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-            font-size: 0.85em;
-            table-layout: fixed;
+            width: 100%;
             border-top: 1px solid #000;
             border-left: 1px solid #000;
+            font-size: 0.85em;
+            overflow: hidden;
         }
-        .cl-order-table th, .cl-order-table td {
+        .cl-matrix-header-flex {
+            display: flex;
+            flex-shrink: 0;
+            background-color: #f0f0f0;
+        }
+        .cl-matrix-body-flex {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+        }
+        .cl-matrix-row-flex {
+            display: flex;
+            flex: 1;
+            min-height: 0;
+        }
+        /* 各セルの共通スタイル */
+        .cl-mf-cell {
             border-right: 1px solid #000;
             border-bottom: 1px solid #000;
             text-align: center;
-            padding: 1px;
-            white-space: nowrap;
             overflow: hidden;
-            /* height:1px で table{height:100%} による均等割りを有効にする */
-            height: 1px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            white-space: nowrap;
+            font-size: 0.9em;
         }
-        .cl-order-table th { height: auto; } /* ヘッダー行はコンテンツに合わせる */
-        .cl-order-table th { background-color: #f0f0f0; font-weight: normal; font-size: 0.9em; }
-        
-        /* カラー列のスタイル調整 */
-        .cl-col-color { 
-            width: 35%; 
-            text-align: center; 
-            padding: 0; /* 余白は内部のdivで調整 */
-            background-color: #fff; 
-            font-weight: bold;
-            position: relative;
-            vertical-align: middle;
-        }
-        .cl-col-total { width: 10%; background-color: #f0f0f0; }
+        .cl-mf-color { flex: 0 0 35%; padding: 0; }
+        .cl-mf-size  { flex: 1; }
+        .cl-mf-total { flex: 0 0 10%; background-color: #f0f0f0; }
 
         /* カラー画像のスタイル (2段組み・大きく) */
         .color-img-overlay {
@@ -407,15 +416,15 @@
         /* レイアウト別の調整 */
         .product-grid-3 .cl-spec-table { font-size: 12pt; }
         .product-grid-3 .cl-spec-table th { width: 5em; }
-        .product-grid-3 .cl-order-table th, .product-grid-3 .cl-order-table td { font-size: 11pt; }
+        .product-grid-3 .cl-matrix-flex { font-size: 11pt; }
 
         .product-grid-6 .cl-spec-table { font-size: 10pt; }
         .product-grid-6 .cl-spec-table th { width: 4.5em; }
-        .product-grid-6 .cl-order-table th, .product-grid-6 .cl-order-table td { font-size: 10pt; }
+        .product-grid-6 .cl-matrix-flex { font-size: 10pt; }
 
         .product-grid-8 .cl-spec-table { font-size: 8pt; }
         .product-grid-8 .cl-spec-table th { width: 4em; }
-        .product-grid-8 .cl-order-table th, .product-grid-8 .cl-order-table td { font-size: 8pt; }
+        .product-grid-8 .cl-matrix-flex { font-size: 8pt; }
         
         /* 画像編集エリアのスタイル */
         .img-edit-preview {
@@ -876,15 +885,16 @@
                 const displayColors = [...colors];
                 while (displayColors.length < MIN_COLOR_ROWS) displayColors.push(null);
 
-                let sizeHeaderHtml = '<th class="cl-col-color"></th>';
-                displaySizes.forEach(s => { sizeHeaderHtml += `<th>${s !== null ? s : ''}</th>`; });
-                sizeHeaderHtml += '<th class="cl-col-total">計</th>';
+                // ヘッダー行（flexbox）
+                let headerCells = `<div class="cl-mf-cell cl-mf-color"></div>`;
+                displaySizes.forEach(s => { headerCells += `<div class="cl-mf-cell cl-mf-size">${s !== null ? s : ''}</div>`; });
+                headerCells += `<div class="cl-mf-cell cl-mf-total">計</div>`;
 
+                // データ行（flexbox）
                 let rowsHtml = '';
                 displayColors.forEach(c => {
                     let colorCellContent;
                     if (c) {
-                        // カラーあり: 画像登録ボタン付きで表示
                         const colorImgSrc = colorMaster[c];
                         let imgContent = '';
                         let wrapClass = 'color-cell-img-wrap';
@@ -900,14 +910,12 @@
                                 <span class="color-cell-text">${c}</span>
                             </div>`;
                     } else {
-                        // 空行: 枠だけ表示
-                        colorCellContent = `<div class="color-cell-content"></div>`;
+                        colorCellContent = '';
                     }
-
-                    let cells = `<td class="cl-col-color p-0">${colorCellContent}</td>`;
-                    displaySizes.forEach(() => { cells += `<td></td>`; });
-                    cells += `<td></td>`;
-                    rowsHtml += `<tr>${cells}</tr>`;
+                    let cells = `<div class="cl-mf-cell cl-mf-color">${colorCellContent}</div>`;
+                    displaySizes.forEach(() => { cells += `<div class="cl-mf-cell cl-mf-size"></div>`; });
+                    cells += `<div class="cl-mf-cell cl-mf-total"></div>`;
+                    rowsHtml += `<div class="cl-matrix-row-flex">${cells}</div>`;
                 });
 
                 return `
@@ -941,12 +949,12 @@
                             </div>
                         </div>
 
-                        <!-- 下段: マトリクス表 -->
+                        <!-- 下段: マトリクス表 (flexbox) -->
                         <div class="cl-matrix-area">
-                            <table class="cl-order-table">
-                                <thead><tr>${sizeHeaderHtml}</tr></thead>
-                                <tbody>${rowsHtml}</tbody>
-                            </table>
+                            <div class="cl-matrix-flex">
+                                <div class="cl-matrix-header-flex">${headerCells}</div>
+                                <div class="cl-matrix-body-flex">${rowsHtml}</div>
+                            </div>
                         </div>
                     </div>
                 `;
