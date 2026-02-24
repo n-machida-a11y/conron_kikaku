@@ -91,7 +91,7 @@ function getProductData() {
     const photoLastRow = photoSheet ? photoSheet.getLastRow() : 1;
     const sizeLastRow = sizeSheet ? sizeSheet.getLastRow() : 1;
 
-    const mainValues = (mainLastRow > 1) ? mainSheet.getRange(2, 1, mainLastRow - 1, 36).getValues() : [];
+    const mainValues = (mainLastRow > 1) ? mainSheet.getRange(2, 1, mainLastRow - 1, 42).getValues() : []; // AP列(42列目)まで取得
     const colorSelectValues = (colorSelectLastRow > 1 && colorSelectSheet) ? colorSelectSheet.getRange(2, 1, colorSelectLastRow - 1, 4).getValues() : [];
     const colorMasterValues = (colorMasterLastRow > 1 && colorMasterSheet) ? colorMasterSheet.getRange(2, 1, colorMasterLastRow - 1, 2).getValues() : [];
     // 企画書_画像シート: A列:ファイルID, B列:商品管理ID, C列:表示位置
@@ -103,9 +103,10 @@ function getProductData() {
     const colorImages = getColorMasterData(); // ここでカラー画像を取得
 
     const MAIN_MAP = {
-      kanriId: 0, season: 5, category: 7, hinban: 9, hinmei: 10, 
-      size_raw: 11, inseam: 12, jodai: 19, gedai: 20, 
-      material_name: 24, fabric_number: 25, composition: 26, shinchoku: 35
+      kanriId: 0, season: 5, category: 7, hinban: 9, hinmei: 10,
+      size_raw: 11, inseam: 12, jodai: 19, gedai: 20,
+      material_name: 24, fabric_number: 25, composition: 26, shinchoku: 35,
+      bunruiCode: 41  // AP列(42列目): 分類コード
     };
 
     const colorCodeToName = {};
@@ -178,6 +179,7 @@ function getProductData() {
         season: row[MAIN_MAP.season] || "N/A",
         name: row[MAIN_MAP.hinmei] || "（品名未設定）",
         status: row[MAIN_MAP.shinchoku] || "未承認",
+        bunruiCode: row[MAIN_MAP.bunruiCode] || "",
         colors: productColorsMap[kanriId] || [],
         price_retail: cleanPrice(row[MAIN_MAP.jodai]),
         price_wholesale: cleanPrice(row[MAIN_MAP.gedai]),
