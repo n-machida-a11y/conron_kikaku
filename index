@@ -1085,16 +1085,12 @@
             els.modal.classList.remove('hidden');
         }
         
-        function initSizeSortable() {
-            const container = document.getElementById('size-tags-container');
-            if (!container) return;
-            new Sortable(container, {
-                animation: 150,
-                onEnd: () => {
-                    if (!editingProduct) return;
-                    const newSizes = [...container.querySelectorAll('[data-size]')].map(el => el.dataset.size);
-                    editingProduct.sizes = newSizes;
-                }
+        // サイズマスタの順番で並び替え（マスタにないものは末尾）
+        function sortByMaster(items, masterList) {
+            return [...items].sort((a, b) => {
+                const ai = masterList.indexOf(a);
+                const bi = masterList.indexOf(b);
+                return (ai === -1 ? masterList.length : ai) - (bi === -1 ? masterList.length : bi);
             });
         }
 
@@ -1137,9 +1133,9 @@
                             <div><label class="block text-sm font-bold text-gray-700">股下</label><input type="text" id="edit-inseam" value="${p.inseam || ''}" class="mt-1 block w-full border border-gray-300 rounded p-2" onchange="updateEditingProduct('inseam', this.value)"></div>
                         </div>
                         <div class="bg-blue-50 p-3 rounded border border-blue-100">
-                            <label class="block text-sm font-bold text-blue-800 mb-2">サイズ展開 <span class="font-normal text-xs text-blue-600">（ドラッグで順番変更可）</span></label>
-                            <div id="size-tags-container" class="flex flex-wrap gap-2 mb-2 min-h-[32px]">
-                                ${p.sizes.map((s, i) => `<div class="flex items-center bg-white border border-blue-200 rounded px-2 py-1 shadow-sm cursor-grab select-none" data-size="${s}"><i class="fas fa-grip-vertical text-gray-300 mr-1 text-xs"></i><span class="text-sm mr-2 font-bold">${s}</span><button type="button" onclick="removeEditItem('sizes', ${i})" class="text-red-400 hover:text-red-600 font-bold">&times;</button></div>`).join('')}
+                            <label class="block text-sm font-bold text-blue-800 mb-2">サイズ展開 <span class="font-normal text-xs text-blue-600">（マスタの順番で自動整列）</span></label>
+                            <div class="flex flex-wrap gap-2 mb-2 min-h-[32px]">
+                                ${p.sizes.map((s, i) => `<div class="flex items-center bg-white border border-blue-200 rounded px-2 py-1 shadow-sm"><span class="text-sm mr-2 font-bold">${s}</span><button type="button" onclick="removeEditItem('sizes', ${i})" class="text-red-400 hover:text-red-600 font-bold">&times;</button></div>`).join('')}
                             </div>
                             <div class="flex gap-2">
                                 <input type="text" id="new-size-input" placeholder="サイズを入力または選択" list="size-master-datalist" class="flex-1 border border-gray-300 rounded px-2 py-1 text-sm">
@@ -1169,8 +1165,6 @@
                     </div>
                 </form>
             `;
-            // サイズ並び替えSortable初期化（DOM描画後）
-            setTimeout(initSizeSortable, 50);
         }
 
         function updateEditingProduct(key, value) { if(editingProduct) editingProduct[key] = value; }
@@ -1179,7 +1173,14 @@
             if(!editingProduct) return;
             const input = document.getElementById(type === 'sizes' ? 'new-size-input' : 'new-color-input');
             const val = input.value.trim();
-            if(val) { editingProduct[type].push(val); renderEditModalContent(); }
+            if(val) {
+                editingProduct[type].push(val);
+                if (type === 'sizes') {
+                    // サイズマスタの順番で自動ソート
+                    editingProduct.sizes = sortByMaster(editingProduct.sizes, sizeNameList);
+                }
+                renderEditModalContent();
+            }
         }
         function handleImageUpload(input) {
             if (!editingProduct || !input.files[0]) return;
