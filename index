@@ -367,7 +367,8 @@
         }
         .cl-mf-color { flex: 0 0 35%; padding: 0; }
         .cl-mf-size  { flex: 1; }
-        .cl-mf-total { flex: 0 0 10%; background-color: #f0f0f0; }
+        .cl-mf-total { flex: 0 0 10%; }
+        .cl-matrix-header-flex .cl-mf-total { background-color: #f0f0f0; }
 
         /* カラー画像のスタイル (2段組み・大きく) */
         .color-img-overlay {
@@ -1088,43 +1089,57 @@
 
         // --- カラーマスタ管理モーダル ---
         function showColorMasterModal() {
-            const colors = [...new Set([...colorNameList, ...Object.keys(colorMaster)])];
-
-            let colorListHtml;
-            if (colors.length === 0) {
-                colorListHtml = '<p class="text-gray-400 text-center py-8">カラーマスタにデータがありません</p>';
-            } else {
-                colorListHtml = `
-                    <div class="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-3">
-                        ${colors.map(colorName => {
-                            const imgSrc = colorMaster[colorName];
-                            const safeName = colorName.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-                            return `
-                                <div class="flex flex-col items-center gap-1 bg-gray-50 border border-gray-200 rounded p-2">
-                                    <div class="w-16 h-16 border border-gray-300 rounded overflow-hidden flex items-center justify-center bg-white cursor-pointer hover:opacity-80" onclick="triggerColorUploadFromModal('${safeName}')">
-                                        ${imgSrc ? `<img src="${imgSrc}" class="w-full h-full object-cover">` : `<i class="fas fa-image text-gray-300 text-2xl"></i>`}
-                                    </div>
-                                    <span class="text-xs text-center break-all leading-tight">${colorName}</span>
-                                    <button type="button" onclick="triggerColorUploadFromModal('${safeName}')" class="text-xs bg-indigo-100 text-indigo-700 hover:bg-indigo-200 px-2 py-0.5 rounded transition w-full text-center">
-                                        ${imgSrc ? '画像を変更' : '画像を登録'}
-                                    </button>
-                                </div>
-                            `;
-                        }).join('')}
-                    </div>
-                `;
-            }
-
             els.modalBody.innerHTML = `
                 <h3 class="text-2xl font-bold mb-4 text-gray-800 flex items-center gap-2">
                     <i class="fas fa-palette text-purple-600"></i> カラーマスタ管理
                 </h3>
-                <p class="text-sm text-gray-500 mb-6">各カラーのスウォッチ画像を登録・変更できます。画像またはボタンをクリックしてください。</p>
+                <p class="text-sm text-gray-500 mb-4">各カラーのスウォッチ画像を登録・変更できます。画像またはボタンをクリックしてください。</p>
+                <div class="mb-4 relative">
+                    <input type="text" id="color-master-search" placeholder="カラー名で検索..."
+                           class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500 bg-gray-50"
+                           oninput="renderColorMasterGrid(this.value)">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                </div>
                 <div id="color-master-list">
-                    ${colorListHtml}
+                    ${buildColorGridHtml('')}
                 </div>
             `;
             els.modal.classList.remove('hidden');
+        }
+
+        function buildColorGridHtml(term) {
+            const allColors = [...new Set([...colorNameList, ...Object.keys(colorMaster)])];
+            const colors = term ? allColors.filter(c => c.toLowerCase().includes(term.toLowerCase())) : allColors;
+            if (allColors.length === 0) {
+                return '<p class="text-gray-400 text-center py-8">カラーマスタにデータがありません</p>';
+            }
+            if (colors.length === 0) {
+                return '<p class="text-gray-400 text-center py-8">該当するカラーがありません</p>';
+            }
+            return `
+                <div class="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-3">
+                    ${colors.map(colorName => {
+                        const imgSrc = colorMaster[colorName];
+                        const safeName = colorName.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                        return `
+                            <div class="flex flex-col items-center gap-1 bg-gray-50 border border-gray-200 rounded p-2">
+                                <div class="w-16 h-16 border border-gray-300 rounded overflow-hidden flex items-center justify-center bg-white cursor-pointer hover:opacity-80" onclick="triggerColorUploadFromModal('${safeName}')">
+                                    ${imgSrc ? `<img src="${imgSrc}" class="w-full h-full object-cover">` : `<i class="fas fa-image text-gray-300 text-2xl"></i>`}
+                                </div>
+                                <span class="text-xs text-center break-all leading-tight">${colorName}</span>
+                                <button type="button" onclick="triggerColorUploadFromModal('${safeName}')" class="text-xs bg-indigo-100 text-indigo-700 hover:bg-indigo-200 px-2 py-0.5 rounded transition w-full text-center">
+                                    ${imgSrc ? '画像を変更' : '画像を登録'}
+                                </button>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }
+
+        function renderColorMasterGrid(term) {
+            const listEl = document.getElementById('color-master-list');
+            if (listEl) listEl.innerHTML = buildColorGridHtml(term);
         }
 
         function triggerColorUploadFromModal(colorName) {
