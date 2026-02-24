@@ -81,19 +81,23 @@ function getProductData() {
     const colorSelectSheet = ss.getSheetByName("カラー選択");
     const colorMasterSheet = ss.getSheetByName("カラーマスタ");
     const photoSheet = ss.getSheetByName("企画書_画像"); // 企画書専用シート
-    
+    const sizeSheet = ss.getSheetByName("サイズ展開");
+
     if (!mainSheet) throw new Error("スプレッドシート内に「商品管理書」シートが見つかりませんでした。");
-    
+
     const mainLastRow = mainSheet.getLastRow();
     const colorSelectLastRow = colorSelectSheet ? colorSelectSheet.getLastRow() : 1;
     const colorMasterLastRow = colorMasterSheet ? colorMasterSheet.getLastRow() : 1;
     const photoLastRow = photoSheet ? photoSheet.getLastRow() : 1;
+    const sizeLastRow = sizeSheet ? sizeSheet.getLastRow() : 1;
 
     const mainValues = (mainLastRow > 1) ? mainSheet.getRange(2, 1, mainLastRow - 1, 36).getValues() : [];
     const colorSelectValues = (colorSelectLastRow > 1 && colorSelectSheet) ? colorSelectSheet.getRange(2, 1, colorSelectLastRow - 1, 4).getValues() : [];
     const colorMasterValues = (colorMasterLastRow > 1 && colorMasterSheet) ? colorMasterSheet.getRange(2, 1, colorMasterLastRow - 1, 2).getValues() : [];
     // 企画書_画像シート: A列:ファイルID, B列:商品管理ID, C列:表示位置
     const photoValues = (photoLastRow > 1 && photoSheet) ? photoSheet.getRange(2, 1, photoLastRow - 1, 3).getValues() : [];
+    // サイズ展開シート: A列:サイズコード, B列:サイズ名
+    const sizeValues = (sizeLastRow > 1 && sizeSheet) ? sizeSheet.getRange(2, 1, sizeLastRow - 1, 2).getValues() : [];
 
     const imageBase64Map = getImageUrlMap();
     const colorImages = getColorMasterData(); // ここでカラー画像を取得
@@ -195,7 +199,12 @@ function getProductData() {
       .map(row => row[1])
       .filter(Boolean);
 
-    return { products: productData, colorImages: colorImages, colorNames: allColorNames };
+    // サイズ展開シートから全サイズ名リストを作成
+    const allSizeNames = sizeValues
+      .map(row => row[1])
+      .filter(Boolean);
+
+    return { products: productData, colorImages: colorImages, colorNames: allColorNames, sizeNames: allSizeNames };
 
   } catch (err) {
     Logger.log("Error in getProductData: " + err);

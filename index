@@ -272,11 +272,10 @@
 
         /* --- 下段エリア (マトリクス表) --- */
         .cl-matrix-area {
-            flex-shrink: 0;
+            flex: 1;      /* 上部(cl-top-section)と同じflex:1で均等割り */
+            min-height: 0;
             padding: 4px 0 0 0;
             background-color: #fff;
-            /* 縦幅を4色展開基準で固定: color-cell 56px×4 + ヘッダー20px + 余白8px */
-            height: 248px;
             overflow: hidden;
         }
         
@@ -492,6 +491,7 @@
         let allProducts = [];
         let colorMaster = {}; // カラー名 -> Base64画像 のマップ
         let colorNameList = []; // 全カラー名リスト（画像未登録含む）
+        let sizeNameList = [];  // 全サイズ名リスト
         let selectedProductIds = new Set();
         let catalogPages = []; 
         let sortableInstances = [];
@@ -571,6 +571,7 @@
                         allProducts = data.products;
                         colorMaster = data.colorImages || {};
                         colorNameList = data.colorNames || [];
+                        sizeNameList = data.sizeNames || [];
                     } else {
                         // 旧形式対応(念のため)
                         allProducts = data;
@@ -1076,7 +1077,10 @@
                                 ${p.sizes.map((s, i) => `<div class="flex items-center bg-white border border-blue-200 rounded px-2 py-1 shadow-sm cursor-grab select-none" data-size="${s}"><i class="fas fa-grip-vertical text-gray-300 mr-1 text-xs"></i><span class="text-sm mr-2 font-bold">${s}</span><button type="button" onclick="removeEditItem('sizes', ${i})" class="text-red-400 hover:text-red-600 font-bold">&times;</button></div>`).join('')}
                             </div>
                             <div class="flex gap-2">
-                                <input type="text" id="new-size-input" placeholder="追加（例: S, M, L）" class="flex-1 border border-gray-300 rounded px-2 py-1 text-sm">
+                                <input type="text" id="new-size-input" placeholder="サイズを入力または選択" list="size-master-datalist" class="flex-1 border border-gray-300 rounded px-2 py-1 text-sm">
+                                <datalist id="size-master-datalist">
+                                    ${sizeNameList.map(s => `<option value="${s}">`).join('')}
+                                </datalist>
                                 <button type="button" onclick="addEditItem('sizes')" class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">追加</button>
                             </div>
                         </div>
