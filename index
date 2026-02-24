@@ -34,7 +34,12 @@
             }
 
             #main-view { display: none !important; }
-            #catalog-view { display: block !important; background: white; padding: 0 !important; }
+            #catalog-view {
+                display: block !important;
+                background: white;
+                padding: 0 !important;
+                min-height: 0 !important; /* min-h-screen(100vh)が空白ページを生成するためリセット */
+            }
             .no-print { display: none !important; }
 
             #catalog-container {
